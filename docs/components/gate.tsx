@@ -67,7 +67,7 @@ const stations = [
     kanji: '権限',
     reading: 'kengen',
     title: 'Scope',
-    body: 'Scopes declared on the route are checked before any policy runs.',
+    body: 'Scopes declared by every matching binding are checked before any policy runs.',
     code: 'insufficient_scope',
   },
   {
@@ -88,7 +88,7 @@ const stations = [
     kanji: '通過',
     reading: 'tsūka',
     title: 'Forward',
-    body: 'Streamed to the upstream. The caller’s token is never passed on.',
+    body: 'Streamed to the upstream. The caller’s token is passed on only where a route opts in.',
     code: 'forwarded',
   },
 ];

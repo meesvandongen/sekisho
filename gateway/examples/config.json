@@ -20,18 +20,20 @@
     },
     "routes": [
       {
-        "name": "list_items",
-        "match": {"operation_id": "listItems"},
+        "name": "baseline",
+        "match": "*",
         "check": {"ref": "has_subject"},
-        "auth": {"backend": "read", "required_scopes": ["items:read"]}
+        "auth": {"backend": "read"}
+      },
+      {
+        "name": "read_scope",
+        "match": {"method": "GET"},
+        "auth": {"required_scopes": ["items:read"]}
       },
       {
         "name": "create_item",
         "match": {"operation_id": "createItem"},
-        "check": {"all": [
-          {"ref": "has_subject"},
-          {"ref": "amount_limit", "params": {"max": 5}}
-        ]},
+        "check": {"ref": "amount_limit", "params": {"max": 5}},
         "auth": {"backend": "write", "required_scopes": ["items:write"]},
         "on_deny": {
           "response": {"status": 403, "code": "package_denied", "detail": "The package does not satisfy the publishing policy."},
@@ -41,11 +43,7 @@
       {
         "name": "get_item",
         "match": {"path": "/items/{id}", "method": "GET"},
-        "check": {"all": [
-          {"ref": "has_subject"},
-          {"cel": "path_params.id != '' && operation.operationId == 'getItem'"}
-        ]},
-        "auth": {"backend": "read", "required_scopes": ["items:read"]}
+        "check": {"cel": "path_params.id != '' && operation.operationId == 'getItem'"}
       }
     ]
   },

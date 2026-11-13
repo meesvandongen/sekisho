@@ -1,10 +1,17 @@
 ---
 title: Policies
-description: Bind every OpenAPI operation to exactly one composable CEL check.
+description: Bind OpenAPI operations to composable CEL checks, as precisely or as broadly as you like.
 icon: ScrollText
 ---
 
-`policy.routes` is an array of route bindings. There must be **exactly one binding per OpenAPI method and path** — listing an operation in OpenAPI implies no policy, and there is no permissive fallback. Missing, duplicate or unknown bindings fail startup.
+`policy.routes` is an array of route bindings. Each binding **matches** a set of OpenAPI operations and contributes a check, required scopes and/or a backend credential to every operation it matches. An operation can be matched by any number of bindings, and they stack:
+
+- every operation must be matched by **at least one binding with a `check`** — listing an operation in OpenAPI implies no policy, and there is no permissive fallback;
+- every matching binding's `check` must pass, in configuration order;
+- every matching binding's `required_scopes` are required;
+- exactly one backend credential is resolved per operation (see [backend resolution](#backend-resolution)).
+
+Uncovered operations, unknown selectors, matchers that select nothing and unresolvable backends all fail startup.
 
 ## Route bindings
 
@@ -12,10 +19,17 @@ icon: ScrollText
 {
   "policy": {
     "definitions": {
+      "has_subject": { "cel": "claims.sub != ''" },
       "publisher": { "cel": "claims.sub == params.subject" },
       "amount": { "file": "policies/amount.cel" }
     },
     "routes": [
+      {
+        "name": "baseline",
+        "match": "*",
+        "check": { "ref": "has_subject" },
+        "auth": { "backend": "read" }
+      },
       {
         "name": "publish_item",
         "match": { "operation_id": "createItem" },
@@ -36,46 +50,66 @@ icon: ScrollText
 }
 ```
 
-The excerpt shows a single binding; a real configuration must cover **every** operation.
+Here every operation requires a subject and uses the `read` credential, and `createItem` additionally runs the publishing check and uses `write`.
 
 ### `match`
 
-Select the operation with either form:
+Either the string `"*"` (every operation) or an object. All keys in one object must hold; list values match **any** of their entries.
 
-<Tabs items={['By operation ID', 'By path and method']}>
-<Tab value="By operation ID">
+| Key | Selects operations… |
+| --- | --- |
+| `operation_id` | with this `operationId`, or any in a list. |
+| `method` | with this HTTP method, or any in a list. |
+| `path` | with exactly this OpenAPI path **template**, e.g. `/items/{id}`, or any in a list. Works for operations without an `operationId`. |
+| `path_prefix` | under this template prefix, compared by whole segments: `/admin` matches `/admin` and `/admin/users/{id}`, not `/administrators`. |
+| `tag` | carrying this OpenAPI tag, or any in a list. |
+| `extension` | whose OpenAPI vendor extensions equal every given value, e.g. `{ "x-tier": "internal" }`. |
+| `all` / `any` / `not` | combining nested matchers, like [rules](#rules). |
 
 ```json
-{ "operation_id": "createItem" }
+{ "match": { "operation_id": ["listItems", "getItem"] } }
+{ "match": { "path": "/items/{id}", "method": "GET" } }
+{ "match": { "tag": "admin", "method": ["POST", "PUT", "DELETE"] } }
+{ "match": { "path_prefix": "/internal", "not": { "operation_id": "healthCheck" } } }
+{ "match": { "any": [{ "tag": "billing" }, { "extension": { "x-pii": true } }] } }
 ```
 
-</Tab>
-<Tab value="By path and method">
+Matching runs once at startup against the OpenAPI document, so it costs nothing per request. An unknown `operation_id`, `path` or `tag`, or a matcher that selects no operations, fails startup.
 
-```json
-{ "path": "/items/{id}", "method": "GET" }
-```
-
-Use the OpenAPI **template**, not a concrete URL. This works for operations without an `operationId`.
-
-</Tab>
-</Tabs>
+<Callout type="warn" title="Broad matchers apply to new endpoints">
+  A binding matched by `"*"`, a tag, a prefix or an extension also covers operations added to the spec later — they inherit its check and backend without a config change. If you want every new endpoint to fail startup until someone reviews it, make sure each operation's only `check` comes from a binding that names it by `operation_id` or `path`. Use [`-explain`](#explaining-the-effective-policy) to review what each operation inherits.
+</Callout>
 
 ### `check`
 
-The rule that must evaluate to `true` for the request to be forwarded. See [rules](#rules) below.
+The rule that must evaluate to `true` for the request to be forwarded. See [rules](#rules) below. A binding may omit `check` when it only sets `auth`, but every operation needs at least one matching binding that has one. Write `{ "cel": "true" }` to allow every authenticated caller explicitly.
 
 ### `auth`
 
-Every binding needs an explicit `auth.backend`:
+`auth.backend` selects the upstream credential:
 
 | Value | Meaning |
 | --- | --- |
 | `"none"` | Forward **no** `Authorization` header upstream. |
+| `"forward"` | Forward the caller's verified bearer token unchanged. |
 | `"default"` | Use the top-level `backend_auth` credential. |
 | _profile name_ | Use the named profile from `backend_auth_profiles`. |
 
-`auth.required_scopes` is an optional **all-of** list checked before the policy. See [backend authentication](/backend-auth).
+A binding may leave `auth.backend` out and inherit it from a broader binding. `auth.required_scopes` is an optional **all-of** list; the scopes of every matching binding are checked before any check runs. See [backend authentication](/backend-auth).
+
+### Backend resolution
+
+Each operation uses exactly one backend. Among the matching bindings that set `auth.backend`, the **narrowest** wins: a binding whose selected operations are a strict subset of another's overrides it. This does not depend on the order of bindings, so the common layering just works:
+
+```json
+[
+  { "match": "*", "check": { "ref": "has_subject" }, "auth": { "backend": "read" } },
+  { "match": { "tag": "admin" }, "auth": { "backend": "admin" } },
+  { "match": { "operation_id": ["createItem", "deleteUser"] }, "auth": { "backend": "write" } }
+]
+```
+
+When the narrowest candidates overlap without one containing the other — say, operations tagged both `admin` and `billing`, with different backends — and they disagree, startup fails and names both bindings. Settle it with a binding that matches exactly the overlapping operations; it is narrower than both. Bindings that agree never conflict.
 
 ### `params`
 
@@ -93,7 +127,7 @@ Customize what happens when the check evaluates to `false`:
   Never interpolate caller input into denial text or logs.
 </Callout>
 
-`on_deny` applies whenever the composed check returns `false`, including when any child of an `all` fails. **Errors** during evaluation or data lookup are not converted into custom denials: they fail closed with their own stable code, such as `policy_error` or `userinfo_unavailable`.
+`on_deny` applies whenever that binding's check returns `false`, including when any child of an `all` fails. When several bindings match, the **first** binding whose check fails decides the response; later checks are not evaluated. **Errors** during evaluation or data lookup are not converted into custom denials: they fail closed with their own stable code, such as `policy_error` or `userinfo_unavailable`.
 
 ## Rules
 
@@ -129,12 +163,29 @@ Rules are compiled and type-checked **once, at startup**.
 body.amount <= params.max
 ```
 
+## Explaining the effective policy
+
+Because bindings stack, the policy for one operation can come from several places. `-explain` prints it per operation and exits, without contacting the issuer:
+
+```sh
+go run -buildvcs=false . -config examples/config.json -explain
+```
+
+```text
+POST /items (createItem)
+  backend: write from routes[2] create_item
+  scopes:  items:write (routes[2] create_item)
+  checks:  routes[0] baseline → routes[2] create_item
+```
+
+Checks are listed in evaluation order. Commit the output, or diff it in review, to see exactly what a config change does to each operation.
+
 ## Limits
 
 - Each CEL evaluation has a cost cap of 10,000 units.
-- The expanded policy graph is limited to 256 nodes and 16 levels per route.
-- The whole configuration may compile at most 4,096 policy nodes.
+- The expanded policy graph is limited to 256 nodes and 16 levels per binding.
+- The whole configuration may compile at most 4,096 policy nodes and 4,096 matcher nodes, with matchers nested at most 16 levels deep.
 
 <Callout type="info" title="Legacy format">
-  The earlier `policy.default` / `policy.operations` format is deliberately rejected. Migrate every operation to an explicit route binding.
+  The earlier `policy.default` / `policy.operations` format is deliberately rejected. Migrate to route bindings.
 </Callout>

@@ -179,29 +179,27 @@ func evaluateFixture(
 	if err != nil {
 		return actual, fmt.Errorf("match OpenAPI route: %w", err)
 	}
-	binding := policies.forRoute(route)
-	if binding == nil {
+	compiled := policies.forRoute(route)
+	if compiled == nil {
 		return actual, fmt.Errorf("no policy binding for %s %s", route.Method, route.Path)
 	}
 	inputs := &requestInputs{
 		w: httptest.NewRecorder(), r: req,
-		route: route, binding: binding, pathParams: pathParams,
+		route: route, compiled: compiled, pathParams: pathParams,
 		values: policies.values, maxBodyBytes: cfg.MaxBodyBytes,
 		fixtureClaims: fixture.Claims, fixtureUserinfo: fixture.Userinfo,
 		fixtureIntrospection: fixture.Introspection, offline: true,
 	}
-	if failure := inputs.requireScopes(binding.requiredScopes); failure != nil {
-		return fixtureDenied(actual, failure.status, failure.code), nil
+	decision := compiled.decide(inputs)
+	if decision.failure != nil {
+		return fixtureDenied(actual, decision.failure.status, decision.failure.code), nil
 	}
-	allowed, failure := binding.rule.evaluate(inputs, binding.params)
-	if failure != nil {
-		return fixtureDenied(actual, failure.status, failure.code), nil
-	}
-	if !allowed {
-		return fixtureDenied(actual, binding.deny.Response.Status, outcomeCode(binding.deny.Response.Code)), nil
+	if decision.denied {
+		deny := decision.binding.deny.Response
+		return fixtureDenied(actual, deny.Status, outcomeCode(deny.Code)), nil
 	}
 	actual.Allowed = true
-	actual.BackendAuth = binding.backendName
+	actual.BackendAuth = compiled.backendName
 	return actual, nil
 }
 

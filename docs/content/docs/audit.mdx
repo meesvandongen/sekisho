@@ -14,7 +14,8 @@ Structured audit events are **on by default**, written as one JSON line per requ
 
 - the outcome code, HTTP status and decision phase;
 - the method, OpenAPI route template and operation ID;
-- the binding name and static deny reason, when present;
+- the binding name, when present: the binding whose check or scopes rejected the request, otherwise the binding that selected the backend;
+- the static deny reason, when present;
 - elapsed milliseconds and the trace ID, when present;
 - a `dependency_status` for rejected token or identity endpoints;
 - after successful verification, `subject_sha256` — the SHA-256 of `issuer + NUL + subject`.

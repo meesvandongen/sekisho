@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -48,6 +49,7 @@ type policyFailure struct {
 
 type policySet struct {
 	routes map[routeKey]*compiledRoute
+	order  []*compiledRoute
 	values map[string]any
 }
 
@@ -56,15 +58,70 @@ type routeKey struct {
 	path   string
 }
 
-type compiledRoute struct {
+// compiledBinding is one entry of policy.routes after compilation.
+type compiledBinding struct {
+	index          int
+	name           string
 	rule           *compiledRule
 	params         map[string]any
 	backendName    string
-	backend        *backendAuth
 	requiredScopes []string
 	deny           DenyConfig
-	name           string
+	operations     operationSet
+}
+
+func (b *compiledBinding) label() string {
+	if b.name != "" {
+		return fmt.Sprintf("routes[%d] %s", b.index, b.name)
+	}
+	return fmt.Sprintf("routes[%d]", b.index)
+}
+
+// compiledRoute is the effective policy for one OpenAPI operation: every
+// matching binding in configuration order plus the resolved backend.
+type compiledRoute struct {
+	key            routeKey
+	operationID    string
+	bindings       []*compiledBinding
+	backendName    string
+	backendBinding *compiledBinding
+	backend        *backendAuth
 	operation      map[string]any
+}
+
+// owner is the binding reported in audit events when no binding decided a denial.
+func (r *compiledRoute) owner() string {
+	return r.backendBinding.name
+}
+
+type routeDecision struct {
+	binding *compiledBinding
+	failure *policyFailure
+	denied  bool
+	scopes  bool
+}
+
+// decide checks every matching binding's scopes, then every check in
+// configuration order, stopping at the first failure or denial.
+func (r *compiledRoute) decide(inputs *requestInputs) routeDecision {
+	for _, binding := range r.bindings {
+		if failure := inputs.requireScopes(binding.requiredScopes); failure != nil {
+			return routeDecision{binding: binding, failure: failure, scopes: true}
+		}
+	}
+	for _, binding := range r.bindings {
+		if binding.rule == nil {
+			continue
+		}
+		allowed, failure := binding.rule.evaluate(inputs, binding.params)
+		if failure != nil {
+			return routeDecision{binding: binding, failure: failure}
+		}
+		if !allowed {
+			return routeDecision{binding: binding, denied: true}
+		}
+	}
+	return routeDecision{}
 }
 
 type compiledRule struct {
@@ -127,115 +184,205 @@ func compilePolicies(cfg Config, spec *openapi3.T) (*policySet, error) {
 		}
 	}
 
-	operations := make(map[routeKey]*openapi3.Operation)
-	operationIDs := make(map[string]routeKey)
-	for path, pathItem := range spec.Paths.Map() {
-		for method, operation := range pathItem.Operations() {
-			key := routeKey{method, path}
-			operations[key] = operation
-			if operation.OperationID != "" {
-				if _, exists := operationIDs[operation.OperationID]; exists {
-					return nil, fmt.Errorf("duplicate OpenAPI operationId %q", operation.OperationID)
-				}
-				operationIDs[operation.OperationID] = key
+	index, specOperations, err := indexOperations(spec)
+	if err != nil {
+		return nil, err
+	}
+	matchers := &matcherCompiler{index: index}
+	bindings := make([]*compiledBinding, 0, len(cfg.Policy.Routes))
+	for position, route := range cfg.Policy.Routes {
+		binding, err := compileBinding(cfg, compiler, matchers, position, route)
+		if err != nil {
+			return nil, fmt.Errorf("policy.routes[%d]: %w", position, err)
+		}
+		bindings = append(bindings, binding)
+	}
+
+	result := &policySet{routes: make(map[routeKey]*compiledRoute, len(index.operations)), values: cfg.Policy.Values}
+	var unchecked, unresolved []string
+	operationBytes := 0
+	for position, info := range index.operations {
+		route := &compiledRoute{key: info.key, operationID: info.id}
+		checked, usesOperation := false, false
+		for _, binding := range bindings {
+			if !binding.operations.contains(position) {
+				continue
+			}
+			route.bindings = append(route.bindings, binding)
+			if binding.rule != nil {
+				checked = true
+				usesOperation = usesOperation || binding.rule.uses("operation")
 			}
 		}
-	}
-	result := &policySet{routes: make(map[routeKey]*compiledRoute, len(operations)), values: cfg.Policy.Values}
-	operationBytes := 0
-	for index, binding := range cfg.Policy.Routes {
-		key, err := selectOperation(binding.Match, operations, operationIDs)
-		if err != nil {
-			return nil, fmt.Errorf("policy.routes[%d]: %w", index, err)
+		label := info.key.method + " " + info.key.path
+		if !checked {
+			unchecked = append(unchecked, label)
+			continue
 		}
-		if _, exists := result.routes[key]; exists {
-			return nil, fmt.Errorf("multiple policy bindings for %s %s", key.method, key.path)
+		if err := route.resolveBackend(); err != nil {
+			unresolved = append(unresolved, label+": "+err.Error())
+			continue
 		}
-		if binding.Name != "" && !validPolicyName(binding.Name) {
-			return nil, fmt.Errorf("policy.routes[%d]: invalid name %q", index, binding.Name)
-		}
-		if err := binding.OnDeny.normalize(); err != nil {
-			return nil, fmt.Errorf("policy.routes[%d].on_deny: %w", index, err)
-		}
-		if err := binding.Auth.validate(cfg.BackendAuth, cfg.BackendAuthProfiles); err != nil {
-			return nil, fmt.Errorf("policy.routes[%d].auth: %w", index, err)
-		}
-		rule, err := compiler.compile(binding.Check, 0)
-		if err != nil {
-			return nil, fmt.Errorf("policy.routes[%d].check: %w", index, err)
-		}
-		expanded := 0
-		if err := rule.validateExpansion(&expanded, 0); err != nil {
-			return nil, fmt.Errorf("policy.routes[%d].check: %w", index, err)
-		}
-		if rule.uses("userinfo") && cfg.Identity.Userinfo == nil {
-			return nil, fmt.Errorf("policy.routes[%d] uses unconfigured userinfo", index)
-		}
-		if rule.uses("introspection") && cfg.Identity.Introspection == nil {
-			return nil, fmt.Errorf("policy.routes[%d] uses unconfigured introspection", index)
-		}
-		selected := &compiledRoute{
-			rule: rule, params: binding.Params, backendName: binding.Auth.Backend,
-			requiredScopes: binding.Auth.RequiredScopes, deny: binding.OnDeny, name: binding.Name,
-		}
-		if rule.uses("operation") {
-			serialized, err := json.Marshal(operations[key])
+		if usesOperation {
+			serialized, err := json.Marshal(specOperations[position])
 			if err != nil || len(serialized) > maxOperationBytes {
-				return nil, fmt.Errorf("policy.routes[%d]: OpenAPI operation exceeds policy limit", index)
+				return nil, fmt.Errorf("%s: OpenAPI operation exceeds policy limit", label)
 			}
 			operationBytes += len(serialized)
 			if operationBytes > maxOperationsTotal {
 				return nil, fmt.Errorf("OpenAPI operation metadata exceeds total policy limit")
 			}
-			if err := json.Unmarshal(serialized, &selected.operation); err != nil {
-				return nil, fmt.Errorf("policy.routes[%d]: decode OpenAPI operation: %w", index, err)
+			if err := json.Unmarshal(serialized, &route.operation); err != nil {
+				return nil, fmt.Errorf("%s: decode OpenAPI operation: %w", label, err)
 			}
 		}
-		result.routes[key] = selected
+		result.routes[info.key] = route
+		result.order = append(result.order, route)
 	}
-	if len(result.routes) != len(operations) {
-		keys := make([]string, 0, len(operations))
-		for key := range operations {
-			if _, covered := result.routes[key]; !covered {
-				keys = append(keys, key.method+" "+key.path)
-			}
-		}
-		sort.Strings(keys)
-		return nil, fmt.Errorf("OpenAPI operations missing policy bindings: %s", strings.Join(keys, ", "))
+	if len(unchecked) > 0 {
+		return nil, fmt.Errorf("OpenAPI operations not matched by any binding with a check: %s",
+			strings.Join(unchecked, ", "))
+	}
+	if len(unresolved) > 0 {
+		return nil, fmt.Errorf("cannot resolve backend auth: %s", strings.Join(unresolved, "; "))
 	}
 	return result, nil
 }
 
-func selectOperation(selector PolicySelector, operations map[routeKey]*openapi3.Operation, ids map[string]routeKey) (routeKey, error) {
-	if selector.OperationID != "" {
-		if selector.Method != "" || selector.Path != "" {
-			return routeKey{}, fmt.Errorf("select by operation_id or by path and method, not both")
+func indexOperations(spec *openapi3.T) (*operationIndex, []*openapi3.Operation, error) {
+	index := &operationIndex{byID: make(map[string]int), paths: make(map[string]bool), tags: make(map[string]bool)}
+	var operations []*openapi3.Operation
+	paths := spec.Paths.InMatchingOrder()
+	sort.Strings(paths)
+	for _, path := range paths {
+		pathItem := spec.Paths.Value(path)
+		methods := make([]string, 0)
+		for method := range pathItem.Operations() {
+			methods = append(methods, method)
 		}
-		key, ok := ids[selector.OperationID]
-		if !ok {
-			return routeKey{}, fmt.Errorf("unknown operationId %q", selector.OperationID)
+		sort.Strings(methods)
+		for _, method := range methods {
+			operation := pathItem.GetOperation(method)
+			info := operationInfo{key: routeKey{method, path}, id: operation.OperationID, tags: operation.Tags}
+			if operation.OperationID != "" {
+				if _, exists := index.byID[operation.OperationID]; exists {
+					return nil, nil, fmt.Errorf("duplicate OpenAPI operationId %q", operation.OperationID)
+				}
+				index.byID[operation.OperationID] = len(index.operations)
+			}
+			if len(operation.Extensions) > 0 {
+				normalized, err := normalizeJSONValue(operation.Extensions)
+				if err != nil {
+					return nil, nil, fmt.Errorf("%s %s: OpenAPI extensions: %w", method, path, err)
+				}
+				info.extensions, _ = normalized.(map[string]any)
+			}
+			for _, tag := range operation.Tags {
+				index.tags[tag] = true
+			}
+			index.paths[path] = true
+			index.operations = append(index.operations, info)
+			operations = append(operations, operation)
 		}
-		return key, nil
 	}
-	key := routeKey{selector.Method, selector.Path}
-	if selector.Method == "" || selector.Path == "" {
-		return routeKey{}, fmt.Errorf("selector requires operation_id or path and method")
+	return index, operations, nil
+}
+
+func compileBinding(
+	cfg Config, compiler *policyCompiler, matchers *matcherCompiler, position int, route RoutePolicyConfig,
+) (*compiledBinding, error) {
+	if route.Name != "" && !validPolicyName(route.Name) {
+		return nil, fmt.Errorf("invalid name %q", route.Name)
 	}
-	if _, ok := operations[key]; !ok {
-		return routeKey{}, fmt.Errorf("unknown OpenAPI path/method %q %q", key.method, key.path)
+	selected, err := matchers.selectOperations(route.Match, 0)
+	if err != nil {
+		return nil, fmt.Errorf("match: %w", err)
 	}
-	return key, nil
+	if selected.count() == 0 {
+		return nil, fmt.Errorf("match selects no OpenAPI operations")
+	}
+	if route.Check == nil && route.Auth.Backend == "" && len(route.Auth.RequiredScopes) == 0 {
+		return nil, fmt.Errorf("binding needs a check, auth.backend or auth.required_scopes")
+	}
+	if route.Check == nil && (len(route.Params) > 0 || !reflect.DeepEqual(route.OnDeny, DenyConfig{})) {
+		return nil, fmt.Errorf("params and on_deny require a check")
+	}
+	if err := route.OnDeny.normalize(); err != nil {
+		return nil, fmt.Errorf("on_deny: %w", err)
+	}
+	if err := route.Auth.validate(cfg.BackendAuth, cfg.BackendAuthProfiles); err != nil {
+		return nil, fmt.Errorf("auth: %w", err)
+	}
+	binding := &compiledBinding{
+		index: position, name: route.Name, params: route.Params, backendName: route.Auth.Backend,
+		requiredScopes: route.Auth.RequiredScopes, deny: route.OnDeny, operations: selected,
+	}
+	if route.Check == nil {
+		return binding, nil
+	}
+	binding.rule, err = compiler.compile(*route.Check, 0)
+	if err != nil {
+		return nil, fmt.Errorf("check: %w", err)
+	}
+	expanded := 0
+	if err := binding.rule.validateExpansion(&expanded, 0); err != nil {
+		return nil, fmt.Errorf("check: %w", err)
+	}
+	if binding.rule.uses("userinfo") && cfg.Identity.Userinfo == nil {
+		return nil, fmt.Errorf("check uses unconfigured userinfo")
+	}
+	if binding.rule.uses("introspection") && cfg.Identity.Introspection == nil {
+		return nil, fmt.Errorf("check uses unconfigured introspection")
+	}
+	return binding, nil
+}
+
+// resolveBackend picks the backend from the narrowest matching bindings that
+// set one: those whose selected operations contain no other candidate's
+// selection. All of those must agree.
+func (r *compiledRoute) resolveBackend() error {
+	var candidates []*compiledBinding
+	for _, binding := range r.bindings {
+		if binding.backendName != "" {
+			candidates = append(candidates, binding)
+		}
+	}
+	if len(candidates) == 0 {
+		return fmt.Errorf("no matching binding sets auth.backend")
+	}
+	var narrowest []*compiledBinding
+	for _, candidate := range candidates {
+		minimal := true
+		for _, other := range candidates {
+			if other != candidate && other.operations.subsetOf(candidate.operations) &&
+				!candidate.operations.subsetOf(other.operations) {
+				minimal = false
+				break
+			}
+		}
+		if minimal {
+			narrowest = append(narrowest, candidate)
+		}
+	}
+	for _, candidate := range narrowest[1:] {
+		if candidate.backendName != narrowest[0].backendName {
+			return fmt.Errorf("%s selects %q but %s selects %q and neither is narrower; "+
+				"add a binding that matches exactly the overlapping operations to choose one",
+				narrowest[0].label(), narrowest[0].backendName, candidate.label(), candidate.backendName)
+		}
+	}
+	r.backendName = narrowest[0].backendName
+	r.backendBinding = narrowest[0]
+	return nil
 }
 
 func (a RouteAuthConfig) validate(defaultBackend BackendAuthConfig, profiles map[string]BackendAuthConfig) error {
 	switch a.Backend {
-	case "none":
+	case "", "none", "forward":
 	case "default":
 		if defaultBackend.GrantType == "none" {
 			return fmt.Errorf("backend default is not configured; select none explicitly")
 		}
-	case "":
-		return fmt.Errorf("backend must explicitly select none, default, or a named profile")
 	default:
 		if _, ok := profiles[a.Backend]; !ok {
 			return fmt.Errorf("unknown backend auth profile %q", a.Backend)
@@ -441,9 +588,11 @@ func (p *policySet) forRoute(route *routers.Route) *compiledRoute {
 }
 
 func (p *policySet) needs(variable string) bool {
-	for _, binding := range p.routes {
-		if binding.rule.uses(variable) {
-			return true
+	for _, route := range p.order {
+		for _, binding := range route.bindings {
+			if binding.rule != nil && binding.rule.uses(variable) {
+				return true
+			}
 		}
 	}
 	return false

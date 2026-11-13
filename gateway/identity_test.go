@@ -142,7 +142,7 @@ func TestIdentityLookupFailuresFailClosed(t *testing.T) {
 			if strings.HasPrefix(tc.source, "userinfo") {
 				cfg.Identity.Userinfo = &UserinfoConfig{URL: endpoint.URL}
 				if tc.source == "userinfo_any" {
-					cfg.Policy.Routes[0].Check = PolicyRule{Any: []PolicyRule{
+					cfg.Policy.Routes[0].Check = &PolicyRule{Any: []PolicyRule{
 						{CEL: `userinfo.sub == "alice"`}, {CEL: "true"},
 					}}
 				} else {

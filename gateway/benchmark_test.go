@@ -218,7 +218,7 @@ func BenchmarkPolicyShortCircuit(b *testing.B) {
 	cfg := testConfig(b, issuer, "http://127.0.0.1:1")
 	disabled := false
 	cfg.Audit.Enabled = &disabled
-	cfg.Policy.Routes[1].Check = PolicyRule{All: []PolicyRule{
+	cfg.Policy.Routes[1].Check = &PolicyRule{All: []PolicyRule{
 		{CEL: `claims.sub == "never"`},
 		{CEL: `body.allowed == true`},
 	}}
