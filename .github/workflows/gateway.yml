@@ -1,0 +1,33 @@
+name: Gateway
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'gateway/**'
+      - 'go.work'
+      - '.github/workflows/gateway.yml'
+  pull_request:
+    paths:
+      - 'gateway/**'
+      - 'go.work'
+      - '.github/workflows/gateway.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: gateway
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: gateway/go.mod
+          cache-dependency-path: gateway/go.sum
+      - run: go vet ./...
+      - run: go test -race ./...
+      - run: go run -buildvcs=false . -config examples/config.json -test-policies policy-tests.json

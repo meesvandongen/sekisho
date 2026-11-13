@@ -1,0 +1,37 @@
+---
+title: Introduction
+description: An OIDC-aware policy gateway that admits only the requests you have explicitly allowed.
+icon: Landmark
+---
+
+A _sekisho_ (関所) was a checkpoint on the highways of Edo-period Japan. Travellers had to present a pass, state their business, and satisfy the guards before they could continue down the road. **Sekisho** does the same for your API.
+
+It sits in front of a single upstream service and, for every request:
+
+1. **Matches** the request against a local OpenAPI 3 specification, used as a strict path/method allowlist.
+2. **Verifies** the inbound bearer JWT: signature, issuer, audience, expiry and algorithm.
+3. **Checks scopes** declared on the route before any policy runs.
+4. **Evaluates** the route's policy — reusable [CEL](https://cel.dev) rules composed with `all`, `any` and `not`.
+5. **Selects** a least-privilege backend credential for that route, obtained via client credentials or token exchange.
+6. **Forwards** the request upstream, never passing on the caller's token.
+
+<Callout title="No implicit allow">
+  Every operation in the OpenAPI document must be bound to exactly one policy. Missing, duplicate or unknown bindings stop the gateway from starting — there is no permissive fallback.
+</Callout>
+
+## Why Sekisho
+
+- **Explicit by construction.** The spec, the bindings and the policies must agree at startup, so a new endpoint can't slip through unprotected.
+- **Lazy and cheap.** Request bodies, userinfo and introspection are fetched only when a selected CEL branch actually needs them; everything else streams.
+- **Least privilege upstream.** Routes pick named backend credentials, so read traffic never carries a write token.
+- **Testable offline.** Run your policies against JSON fixtures in CI without an issuer, network or secrets.
+- **Observable.** Stable outcome codes, a structured audit trail, and compile-time OpenTelemetry instrumentation.
+
+## Where next
+
+<Cards>
+  <Card title="Quickstart" href="/docs/quickstart" description="Build the gateway and run it against the example config." />
+  <Card title="Policies" href="/docs/policies" description="Bind every operation to a composable CEL check." />
+  <Card title="Backend authentication" href="/docs/backend-auth" description="Give each route the narrowest upstream credential." />
+  <Card title="Configuration reference" href="/docs/configuration" description="Every field of the JSON configuration file." />
+</Cards>

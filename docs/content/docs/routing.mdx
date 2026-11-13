@@ -1,0 +1,38 @@
+---
+title: Routing
+description: The OpenAPI document is a strict path and method allowlist for the single upstream.
+icon: Route
+---
+
+Sekisho reads a local OpenAPI 3 document and uses it as a **path/method allowlist**. It does not validate request or response schemas.
+
+## Matching requests
+
+- Every path and method in the spec is a route. Requests to unknown paths return `404 route_not_found`; known paths with an unlisted method return `405 method_not_allowed`.
+- The spec's `servers` entries are **ignored** for incoming matching. The document must describe the _public_ paths callers use.
+- Path templates such as `/items/{id}` match concrete paths; the parameter values are available to policies as `path_params`.
+
+## Forwarding to the upstream
+
+Set `upstream_url` separately from the spec. Its path is a prefix: with an upstream of `https://api.internal.example/v1`, the public path `/items` is forwarded to `/v1/items`.
+
+```json title="config.json"
+{
+  "openapi_file": "api.yaml",
+  "upstream_url": "https://api.internal.example/v1"
+}
+```
+
+## Ambiguous paths are rejected
+
+To avoid route-interpretation differences between Sekisho and the upstream, requests are rejected with `400 ambiguous_path` when they contain:
+
+- encoded path separators (`%2F`, `%5C`);
+- backslashes;
+- `.` or `..` path segments.
+
+## Spec loading
+
+- External `$ref` files and URLs are disabled; local references within the document work.
+- OpenAPI files are limited to 8 MiB.
+- Every operation must be [bound to a policy](/docs/policies). `operationId` is optional — bindings can match on the path template and method instead.

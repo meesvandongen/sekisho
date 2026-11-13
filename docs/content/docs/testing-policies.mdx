@@ -1,0 +1,57 @@
+---
+title: Testing policies
+description: Run the compiled policy, route and scope logic against fixtures — no issuer, network or secrets required.
+icon: FlaskConical
+---
+
+Sekisho can evaluate your configuration against JSON fixtures without starting a listener, contacting the issuer, fetching backend tokens or loading client secrets:
+
+```sh
+cd gateway
+go run -buildvcs=false . -config examples/config.json -test-policies policy-tests.json
+```
+
+The fixture path is relative to the config file. Output is one JSON result per case with a `passed` field, and the command exits non-zero on any mismatch — ready for CI.
+
+## Fixture format
+
+```json title="policy-tests.json"
+[
+  {
+    "name": "publish_within_limit",
+    "method": "POST",
+    "path": "/items?tenant=blue",
+    "content_type": "application/json",
+    "body": "{\"amount\":3}",
+    "claims": { "sub": "alice", "scope": "items:write" },
+    "expected": { "allowed": true, "backend_auth": "write" }
+  },
+  {
+    "name": "publish_above_limit",
+    "method": "POST",
+    "path": "/items?tenant=blue",
+    "content_type": "application/json",
+    "body": "{\"amount\":6}",
+    "claims": { "sub": "alice", "scope": "items:write" },
+    "expected": { "allowed": false, "status": 403, "code": "package_denied" }
+  }
+]
+```
+
+| Field | Description |
+| --- | --- |
+| `name` | Case name, reported in the output. |
+| `method`, `path` | HTTP method and **concrete** path, including the query string. |
+| `host` | Optional `Host`. |
+| `headers` | Optional request headers. |
+| `content_type` | Optional content type. |
+| `body` / `body_base64` | Raw UTF-8 body, or base64 for binary bodies. |
+| `claims` | Simulated verified JWT claims. |
+| `userinfo`, `introspection` | Optional simulated identity responses. |
+| `expected` | `{"allowed": true, "backend_auth": "read"}` or `{"allowed": false, "status": 403, "code": "package_denied"}`. |
+
+Fixture files are limited to 1 MiB and 256 cases. See [`examples/policy-tests.json`](https://github.com/meesvandongen/sekisho/blob/main/gateway/examples/policy-tests.json) for allowed, denied, missing-scope and path/method-selector cases.
+
+<Callout type="warn" title="Fixtures are not authentication tests">
+  Supplied claims stand in for a verified JWT. Identity objects stand in for endpoint responses and are checked for matching subject, `active` and expiry — but no network or cryptographic verification happens. Use the signed-token integration tests for those paths. If a selected CEL branch needs identity data the fixture doesn't provide, the case fails closed.
+</Callout>

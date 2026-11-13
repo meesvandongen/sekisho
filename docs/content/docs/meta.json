@@ -1,0 +1,25 @@
+{
+  "title": "Sekisho",
+  "pages": [
+    "---門 · Start---",
+    "index",
+    "quickstart",
+    "---検 · Gate---",
+    "routing",
+    "authentication",
+    "policies",
+    "expressions",
+    "---札 · Credentials---",
+    "backend-auth",
+    "identity",
+    "---番 · Operations---",
+    "testing-policies",
+    "outcomes",
+    "audit",
+    "opentelemetry",
+    "limits",
+    "benchmarks",
+    "---典 · Reference---",
+    "configuration"
+  ]
+}

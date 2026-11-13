@@ -1,0 +1,57 @@
+---
+title: Expressions
+description: The variables available to CEL, and how request inputs are resolved lazily.
+icon: Braces
+---
+
+## Variables
+
+| Variable | Value |
+| --- | --- |
+| `claims` | Verified JWT claims as a map. |
+| `headers` | Lowercase header names mapped to lists of values, including the original `authorization`. |
+| `query` | Query parameter names mapped to lists of values. |
+| `path_params` | OpenAPI path parameter names and values. |
+| `body` | Parsed JSON value, or `null` for an empty body. |
+| `body_bytes` | The raw request body as bytes. |
+| `body_text` | The request body as UTF-8 text (for non-JSON bodies too). |
+| `method`, `path`, `host` | Request method, decoded path, and `Host`. |
+| `operation` | The OpenAPI **Operation Object** as a map with OpenAPI JSON keys — `tags`, `parameters`, `responses`, `operationId` when present, and extensions. |
+| `operation_id` | The operation ID, or an empty string. |
+| `config` | The shared `policy.values` map. |
+| `params` | Binding and reference parameters. |
+| `userinfo` | The [userinfo](/docs/identity#userinfo) response. Fetched only when evaluated. |
+| `introspection` | The [introspection](/docs/identity#introspection) response. Fetched only when evaluated. |
+
+```cel title="example.cel"
+claims.sub == "publisher" &&
+"tenant" in query && query["tenant"][0] == config.tenant &&
+"authorization" in headers && headers["authorization"].size() == 1 &&
+body.package == config.package &&
+operation.tags.exists(tag, tag == "publish") && operation_id == "createItem"
+```
+
+## Lazy inputs
+
+Inputs are resolved lazily and memoized for the duration of a request.
+
+- A body is buffered **only** if a selected CEL branch actually reads `body`, `body_bytes` or `body_text`. Otherwise it streams straight to the upstream.
+- JSON is parsed only for `body`, which requires a JSON content type (`application/json` or `+json`).
+- Identity endpoints are called only when `userinfo` or `introspection` is evaluated. CEL short-circuiting skips unreachable lookups.
+- Large OpenAPI operations are materialized only if `operation` is referenced, with a 256 KiB per-operation and 8 MiB total serialized limit.
+
+## Body parsing rules
+
+| Input | Requirements |
+| --- | --- |
+| `body` | JSON content type; valid UTF-8; no duplicate object keys; bounded nesting (64 levels) and value count (20,000); numbers within the safe double-precision range. |
+| `body_text` | Valid UTF-8. |
+| `body_bytes` | Any bytes, including binary data. |
+
+<Callout type="warn" title="Numbers are doubles">
+  CEL sees JSON numbers as doubles. Use integer minor units below 2<sup>53</sup>, or strings, when exact decimal semantics matter.
+</Callout>
+
+## Failing closed
+
+Missing fields, lookup failures and evaluation errors **deny** the request — even when an `any` or `||` could otherwise have returned `true`. The resulting codes are listed under [outcomes](/docs/outcomes).

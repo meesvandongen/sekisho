@@ -1,0 +1,67 @@
+---
+title: Identity lookups
+description: Optional userinfo and introspection data for policies, fetched only when a policy reads it.
+icon: IdCard
+---
+
+`identity.userinfo` and `identity.introspection` are **independent** and are never queried merely because they are configured. A lookup happens only when the selected policy evaluates `userinfo` or `introspection`, and CEL short-circuiting skips unreachable lookups. An unused lookup makes no requests and does not load its client secret.
+
+```json title="config.json"
+{
+  "identity": {
+    "userinfo": {
+      "url": "https://issuer.example/userinfo",
+      "cache": { "ttl_seconds": 30, "max_entries": 128 }
+    },
+    "introspection": {
+      "url": "https://issuer.example/oauth2/introspect",
+      "client_id": "inspector",
+      "client_auth": "client_secret_basic",
+      "client_secret_env": "INTROSPECTION_CLIENT_SECRET",
+      "cache": { "ttl_seconds": 30, "max_entries": 128 }
+    }
+  }
+}
+```
+
+Both endpoints require explicit HTTP(S) URLs without query strings. Responses must be JSON objects no larger than 16 KiB, and the HTTP client has a 10-second timeout.
+
+## Userinfo
+
+Sends the verified inbound JWT as a bearer token in a `GET` request. The response `sub` **must match** the verified JWT subject.
+
+```cel
+userinfo.email_verified == true
+```
+
+## Introspection
+
+Performs an authenticated [RFC 7662](https://www.rfc-editor.org/rfc/rfc7662) `POST` — never a token-in-URL `GET`. The response must have `active: true`; `sub` and `exp` are checked when present. `token_type_hint` is optional, for providers that require one.
+
+Introspection supports the same `client_secret_basic`, `client_secret_post` and `private_key_jwt` credentials as [backend authentication](/docs/backend-auth#client-authentication).
+
+<Callout type="info">
+  Introspection is an _additional_ check on a JWT already validated locally — not a way to accept opaque tokens.
+</Callout>
+
+## Failure handling
+
+Lookup failures and mismatched identities **deny** access, even when a CEL `any` or `||` could otherwise return `true`.
+
+| Code | Status |
+| --- | --- |
+| `userinfo_unavailable`, `userinfo_invalid` | 502 |
+| `userinfo_subject_mismatch` | 401 |
+| `introspection_unavailable`, `introspection_invalid` | 502 |
+| `introspection_subject_mismatch`, `token_inactive` | 401 |
+
+## Caching
+
+- The cache TTL defaults to **zero (off)** and is capped at 300 seconds, with at most 256 entries per endpoint.
+- Entries are keyed by a SHA-256 digest of the inbound token, never the raw token.
+- Successful responses are cached no longer than the verified JWT's expiry, nor the introspection `exp` when present.
+- Concurrent lookups for the same token are coalesced.
+
+<Callout type="warn" title="Revocation latency">
+  Positive caching can delay revocation visibility by up to the configured TTL. Leave caching off, or choose a short TTL, when immediate revocation matters.
+</Callout>

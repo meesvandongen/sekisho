@@ -1,0 +1,86 @@
+---
+title: Backend authentication
+description: Give every route the narrowest upstream credential, without ever forwarding the caller's token.
+icon: Ticket
+---
+
+The inbound bearer token is **never** forwarded as the upstream `Authorization` header. Instead, each route selects a backend credential with `auth.backend`:
+
+- `"none"` forwards no `Authorization` header at all;
+- `"default"` uses the top-level `backend_auth`;
+- any other name selects a profile from `backend_auth_profiles`, each with its own scope, audience/resource, credentials and cache.
+
+Configure separate read and write profiles rather than requesting their union for every route.
+
+Sekisho also strips `Proxy-Authorization`, `X-Forwarded-Authorization`, `X-Original-Authorization`, and inbound forwarding and correlation headers.
+
+## Required scopes
+
+`auth.required_scopes` is an optional **all-of** list of permissions read from the verified token's `scope` string or `scp` string/array. A missing scope returns `403 insufficient_scope` **before** the policy runs, so no identity lookups are made.
+
+```json
+{ "auth": { "backend": "read", "required_scopes": ["items:read"] } }
+```
+
+## Grants
+
+<Tabs items={['client_credentials', 'token_exchange']}>
+<Tab value="client_credentials">
+
+Acquires a bearer token and caches it until shortly before expiry.
+
+```json
+{
+  "grant_type": "client_credentials",
+  "token_url": "https://issuer.example/oauth2/token",
+  "client_id": "backend-client",
+  "client_auth": "client_secret_basic",
+  "client_secret_env": "BACKEND_CLIENT_SECRET",
+  "scope": ["items:read"]
+}
+```
+
+</Tab>
+<Tab value="token_exchange">
+
+Exchanges the verified inbound JWT as `subject_token` using [RFC 8693](https://www.rfc-editor.org/rfc/rfc8693).
+
+```json
+{
+  "grant_type": "token_exchange",
+  "token_url": "https://issuer.example/oauth2/token",
+  "client_id": "backend-client",
+  "client_auth": "private_key_jwt",
+  "private_key_file": "client-key.pem",
+  "key_id": "backend-key-1",
+  "subject_token_type": "urn:ietf:params:oauth:token-type:id_token",
+  "audience": "backend-api"
+}
+```
+
+- By default the exchange runs once per request. Set `cache.ttl_seconds` (1–300) to enable a bounded per-profile, per-inbound-token cache, optionally with `cache.max_entries` (1–256, default 128). Entries expire no later than either the JWT or the backend token; errors are not cached.
+- Set `subject_token_type` to `urn:ietf:params:oauth:token-type:id_token` if your issuer provides ID tokens instead of access tokens.
+- Optional `requested_token_type`, `audience`, `resource` and `scope` are sent to the token endpoint. The response must declare the requested `issued_token_type`.
+
+</Tab>
+</Tabs>
+
+## Client authentication
+
+Both grants require `token_url`, `client_id` and exactly one `client_auth` method. The top-level default and every named profile share the same schema.
+
+| `client_auth` | Credential |
+| --- | --- |
+| `client_secret_basic` _(recommended)_ | Secret read at startup from the environment variable named by `client_secret_env`. |
+| `client_secret_post` | As above, sent in the request body. |
+| `private_key_jwt` | A short-lived RS256 client assertion ([RFC 7523](https://www.rfc-editor.org/rfc/rfc7523)) signed with a PEM RSA key of at least 2048 bits from `private_key_file`. An optional `key_id` becomes the JWT `kid`. |
+
+<Callout type="warn" title="Keep secrets out of the config">
+  Never put a secret's value in the JSON file, and keep private keys outside source control.
+</Callout>
+
+## Limits
+
+- At most 64 named profiles.
+- At most 1,024 token-exchange cache entries across all profiles.
+- Token responses are capped at 64 KiB.

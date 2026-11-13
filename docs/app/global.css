@@ -1,0 +1,623 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+
+/* ──────────────────────────────────────────────────────────────────────────
+   関所 · Sekisho theme
+   Washi paper, sumi ink and vermilion seals — with an indigo night mode.
+   ────────────────────────────────────────────────────────────────────────── */
+
+@theme {
+  --font-sans: 'Zen Kaku Gothic New', 'Hiragino Sans', 'Yu Gothic', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Shippori Mincho B1', 'Hiragino Mincho ProN', 'Yu Mincho', ui-serif, Georgia, serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Traditional colours (伝統色) */
+  --color-shu: #c53a2b; /* 朱 vermilion */
+  --color-shu-deep: #9b2a1e; /* 紅樺 */
+  --color-kin: #a87a22; /* 金 gold */
+  --color-ai: #2b4b6f; /* 藍 indigo */
+  --color-matcha: #5a7536; /* 抹茶 */
+  --color-sumi: #1f1a15; /* 墨 ink */
+  --color-washi: #f6f0e4; /* 和紙 paper */
+  --color-kinari: #efe6d5; /* 生成り unbleached */
+
+  /* Fumadocs tokens — light (paper) */
+  --color-fd-background: #f6f0e4;
+  --color-fd-foreground: #1f1a15;
+  --color-fd-muted: #ede4d3;
+  --color-fd-muted-foreground: #6b5d4b;
+  --color-fd-popover: #fbf7ef;
+  --color-fd-popover-foreground: #1f1a15;
+  --color-fd-card: #fbf7ef;
+  --color-fd-card-foreground: #1f1a15;
+  --color-fd-border: rgb(107 82 52 / 0.2);
+  --color-fd-primary: #c53a2b;
+  --color-fd-primary-foreground: #fff8ee;
+  --color-fd-secondary: #ebe1cd;
+  --color-fd-secondary-foreground: #2a231c;
+  --color-fd-accent: rgb(197 58 43 / 0.08);
+  --color-fd-accent-foreground: #8f2a1f;
+  --color-fd-ring: #c53a2b;
+  --color-fd-overlay: rgb(31 26 21 / 0.35);
+}
+
+:root {
+  --color-fd-info: #2b4b6f;
+  --color-fd-warning: #a87a22;
+  --color-fd-error: #c53a2b;
+  --color-fd-success: #5a7536;
+  --color-fd-idea: #a87a22;
+
+  --paper-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .36 0 0 0 0 .27 0 0 0 0 .16 0 0 0 -.55 .34'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --seigaiha: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='24' viewBox='0 0 48 24'%3E%3Cdefs%3E%3Cg id='s'%3E%3Ccircle r='24' fill='%23f6f0e4'/%3E%3Cg fill='none' stroke='%23c53a2b' stroke-width='1.1'%3E%3Ccircle r='22.5'/%3E%3Ccircle r='17'/%3E%3Ccircle r='11.5'/%3E%3Ccircle r='6'/%3E%3C/g%3E%3C/g%3E%3C/defs%3E%3Cuse href='%23s' x='0' y='-12'/%3E%3Cuse href='%23s' x='48' y='-12'/%3E%3Cuse href='%23s' x='24' y='0'/%3E%3Cuse href='%23s' x='0' y='12'/%3E%3Cuse href='%23s' x='48' y='12'/%3E%3Cuse href='%23s' x='24' y='24'/%3E%3Cuse href='%23s' x='0' y='36'/%3E%3Cuse href='%23s' x='48' y='36'/%3E%3C/svg%3E");
+  --asanoha: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='69.28' viewBox='0 0 40 69.28'%3E%3Cg fill='none' stroke='%231f1a15' stroke-width='.6'%3E%3Cpath d='M0 0L20 11.55L40 0M20 11.55V34.64M0 23.09L20 34.64L40 23.09M0 0V23.09M40 0V23.09M0 23.09L20 0L40 23.09M0 46.19L20 34.64L40 46.19M20 34.64V57.74M0 69.28L20 57.74L40 69.28M0 46.19V69.28M40 46.19V69.28M0 46.19L20 69.28L40 46.19M0 23.09L20 57.74M40 23.09L20 57.74M0 23.09V46.19M40 23.09V46.19M0 46.19L20 34.64M20 0L0 23.09'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+/* Dark: 藍 indigo night, with ink-black paper */
+.dark {
+  --color-shu: #e2563f;
+  --color-kin: #d4a650;
+  --color-ai: #7fa3cc;
+  --color-matcha: #9bb86d;
+
+  --color-fd-background: #12110f;
+  --color-fd-foreground: #ece3d2;
+  --color-fd-muted: #1e1b17;
+  --color-fd-muted-foreground: #a69883;
+  --color-fd-popover: #191714;
+  --color-fd-popover-foreground: #ece3d2;
+  --color-fd-card: #1a1814;
+  --color-fd-card-foreground: #ece3d2;
+  --color-fd-border: rgb(236 227 210 / 0.1);
+  --color-fd-primary: #e2563f;
+  --color-fd-primary-foreground: #1a0f0b;
+  --color-fd-secondary: #24201b;
+  --color-fd-secondary-foreground: #ece3d2;
+  --color-fd-accent: rgb(226 86 63 / 0.12);
+  --color-fd-accent-foreground: #f3b6a6;
+  --color-fd-ring: #e2563f;
+  --color-fd-overlay: rgb(0 0 0 / 0.55);
+
+  --color-fd-info: #7fa3cc;
+  --color-fd-warning: #d4a650;
+  --color-fd-error: #e2563f;
+  --color-fd-success: #9bb86d;
+  --color-fd-idea: #d4a650;
+
+  --paper-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .95 0 0 0 0 .9 0 0 0 0 .82 0 0 0 -.4 .24'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --seigaiha: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='24' viewBox='0 0 48 24'%3E%3Cdefs%3E%3Cg id='s'%3E%3Ccircle r='24' fill='%2312110f'/%3E%3Cg fill='none' stroke='%23e2563f' stroke-width='1.1'%3E%3Ccircle r='22.5'/%3E%3Ccircle r='17'/%3E%3Ccircle r='11.5'/%3E%3Ccircle r='6'/%3E%3C/g%3E%3C/g%3E%3C/defs%3E%3Cuse href='%23s' x='0' y='-12'/%3E%3Cuse href='%23s' x='48' y='-12'/%3E%3Cuse href='%23s' x='24' y='0'/%3E%3Cuse href='%23s' x='0' y='12'/%3E%3Cuse href='%23s' x='48' y='12'/%3E%3Cuse href='%23s' x='24' y='24'/%3E%3Cuse href='%23s' x='0' y='36'/%3E%3Cuse href='%23s' x='48' y='36'/%3E%3C/svg%3E");
+  --asanoha: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='69.28' viewBox='0 0 40 69.28'%3E%3Cg fill='none' stroke='%23ece3d2' stroke-width='.6'%3E%3Cpath d='M0 0L20 11.55L40 0M20 11.55V34.64M0 23.09L20 34.64L40 23.09M0 0V23.09M40 0V23.09M0 23.09L20 0L40 23.09M0 46.19L20 34.64L40 46.19M20 34.64V57.74M0 69.28L20 57.74L40 69.28M0 46.19V69.28M40 46.19V69.28M0 46.19L20 69.28L40 46.19M0 23.09L20 57.74M40 23.09L20 57.74M0 23.09V46.19M40 23.09V46.19M0 46.19L20 34.64M20 0L0 23.09'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+/* ── Base ─────────────────────────────────────────────────────────────── */
+
+html {
+  scrollbar-gutter: stable;
+  font-feature-settings: 'palt';
+}
+
+html > body[data-scroll-locked] {
+  margin-right: 0px !important;
+  --removed-body-scroll-bar-size: 0px !important;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-fd-background);
+  background-image: var(--paper-grain);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 暖簾 noren — a vermilion thread across the top of every page */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0 0 auto;
+  height: 3px;
+  z-index: 60;
+  background: linear-gradient(90deg, var(--color-shu) 0 70%, var(--color-kin) 70% 72%, var(--color-shu) 72%);
+  pointer-events: none;
+}
+
+::selection {
+  background: var(--color-shu);
+  color: #fff8ee;
+}
+
+:focus-visible {
+  outline-color: var(--color-shu);
+}
+
+* {
+  scrollbar-color: color-mix(in oklab, var(--color-fd-muted-foreground) 45%, transparent) transparent;
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+/* ── Navigation ───────────────────────────────────────────────────────── */
+
+.nav-wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.nav-wordmark-name {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.15rem;
+  letter-spacing: 0.01em;
+  color: var(--color-fd-foreground);
+}
+
+.nav-wordmark-kanji {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 0.8rem;
+  color: var(--color-shu);
+  writing-mode: vertical-rl;
+  line-height: 1;
+  padding-inline-start: 0.5rem;
+  border-inline-start: 1px solid var(--color-fd-border);
+}
+
+#nd-nav,
+#nd-subnav {
+  background-color: color-mix(in oklab, var(--color-fd-background) 82%, transparent);
+  border-bottom-color: var(--color-fd-border);
+}
+
+/* ── Sidebar ──────────────────────────────────────────────────────────── */
+
+#nd-sidebar {
+  --color-fd-muted: color-mix(in oklab, var(--color-kinari) 70%, transparent);
+  background-color: color-mix(in oklab, var(--color-fd-muted) 55%, var(--color-fd-background));
+  border-inline-end: 1px solid var(--color-fd-border);
+}
+
+.dark #nd-sidebar {
+  --color-fd-muted: #1b1915;
+  --color-fd-secondary: #24201b;
+  --color-fd-muted-foreground: #a69883;
+  background-color: #161411;
+}
+
+.sidebar-banner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid color-mix(in oklab, var(--color-shu) 35%, transparent);
+  border-radius: 3px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 0.95rem;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+  color: var(--color-shu);
+  background:
+    linear-gradient(var(--color-fd-card), var(--color-fd-card)) padding-box;
+  overflow: hidden;
+}
+
+.sidebar-banner::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--seigaiha);
+  background-size: 24px 12px;
+  opacity: 0.12;
+  mask-image: linear-gradient(90deg, transparent 45%, black);
+  pointer-events: none;
+}
+
+.sidebar-banner-en {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 0.68rem;
+  line-height: 1.3;
+  letter-spacing: 0.04em;
+  white-space: normal;
+  color: var(--color-fd-muted-foreground);
+}
+
+/* Section separators from meta.json (e.g. "門 · Start") */
+#nd-sidebar p,
+#nd-sidebar-mobile p {
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--color-fd-foreground);
+}
+
+#nd-sidebar a[data-active='true'],
+#nd-sidebar-mobile a[data-active='true'] {
+  color: var(--color-shu);
+  background-color: var(--color-fd-accent);
+  box-shadow: inset 2px 0 0 var(--color-shu);
+  border-radius: 2px;
+}
+
+#nd-sidebar a[data-active='true'] svg,
+#nd-sidebar-mobile a[data-active='true'] svg {
+  color: var(--color-shu);
+}
+
+/* ── Page header ──────────────────────────────────────────────────────── */
+
+#nd-page .docs-title {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(2rem, 1.4rem + 2vw, 2.6rem);
+  letter-spacing: -0.005em;
+  line-height: 1.15;
+}
+
+#nd-page .docs-title::before {
+  content: '';
+  display: block;
+  width: 2.25rem;
+  height: 3px;
+  margin-bottom: 1.1rem;
+  background: var(--color-shu);
+  box-shadow: 2.6rem 0 0 var(--color-kin);
+  width: 2.25rem;
+}
+
+#nd-page .docs-description {
+  font-size: 1.08rem;
+  line-height: 1.7;
+}
+
+#nd-page .docs-actions {
+  border-bottom: 1px solid var(--color-fd-border);
+  background-image: linear-gradient(90deg, var(--color-shu), transparent 40%);
+  background-size: 100% 1px;
+  background-position: bottom;
+  background-repeat: no-repeat;
+  border-bottom-color: transparent;
+}
+
+/* ── Prose ────────────────────────────────────────────────────────────── */
+
+.prose {
+  --tw-prose-body: color-mix(in oklab, var(--color-fd-foreground) 88%, var(--color-fd-background));
+  line-height: 1.8;
+}
+
+.prose :where(h1, h2, h3, h4):not(:where(.not-prose, .not-prose *)) {
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: 0.005em;
+}
+
+.prose :where(h2):not(:where(.not-prose, .not-prose *)) {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding-bottom: 0.45rem;
+  border-bottom: 1px solid var(--color-fd-border);
+}
+
+/* 菱 diamond crest before section headings */
+.prose :where(h2):not(:where(.not-prose, .not-prose *))::before {
+  content: '';
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  background: var(--color-shu);
+  transform: rotate(45deg);
+}
+
+.prose :where(h3):not(:where(.not-prose, .not-prose *)) {
+  color: color-mix(in oklab, var(--color-fd-foreground) 92%, var(--color-shu));
+}
+
+.prose :where(a):not(:where(.not-prose, .not-prose *, [data-card])) {
+  color: var(--color-fd-foreground);
+  text-decoration-line: underline;
+  text-decoration-color: color-mix(in oklab, var(--color-shu) 60%, transparent);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+  transition: color 120ms, text-decoration-color 120ms;
+}
+
+.prose :where(a):not(:where(.not-prose, .not-prose *, [data-card])):hover {
+  color: var(--color-shu);
+  text-decoration-color: var(--color-shu);
+}
+
+.prose :where(strong):not(:where(.not-prose, .not-prose *)) {
+  color: var(--color-fd-foreground);
+  font-weight: 700;
+}
+
+.prose :where(:not(pre) > code):not(:where(.not-prose, .not-prose *)) {
+  font-size: 0.86em;
+  padding: 0.12em 0.38em;
+  border-radius: 3px;
+  border: 1px solid var(--color-fd-border);
+  background: color-mix(in oklab, var(--color-fd-muted) 75%, transparent);
+  color: color-mix(in oklab, var(--color-fd-foreground) 80%, var(--color-shu));
+}
+
+.prose :where(blockquote):not(:where(.not-prose, .not-prose *)) {
+  border-inline-start: 3px solid var(--color-shu);
+  font-family: var(--font-display);
+  font-style: normal;
+}
+
+.prose :where(ol > li)::marker {
+  font-family: var(--font-display);
+  font-weight: 800;
+  color: var(--color-shu);
+}
+
+.prose :where(ul > li)::marker {
+  color: var(--color-shu);
+}
+
+.prose :where(hr):not(:where(.not-prose, .not-prose *)) {
+  border: 0;
+  height: 14px;
+  background-image: var(--seigaiha);
+  background-size: 28px 14px;
+  opacity: 0.35;
+  mask-image: linear-gradient(90deg, transparent, black 30%, black 70%, transparent);
+}
+
+/* Tables: ledger style */
+.prose :where(table):not(:where(.not-prose, .not-prose *)) {
+  font-size: 0.92em;
+}
+
+.prose :where(thead th):not(:where(.not-prose, .not-prose *)) {
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  background: color-mix(in oklab, var(--color-kinari) 60%, transparent);
+  border-bottom: 2px solid var(--color-shu);
+}
+
+.dark .prose :where(thead th):not(:where(.not-prose, .not-prose *)) {
+  background: #1d1a16;
+}
+
+.prose :where(tbody tr):not(:where(.not-prose, .not-prose *)):hover {
+  background: var(--color-fd-accent);
+}
+
+/* ── Code blocks ──────────────────────────────────────────────────────── */
+
+figure.shiki {
+  border-radius: 4px;
+  border: 1px solid var(--color-fd-border);
+  background-color: #f2ecdf;
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.6) inset,
+    0 10px 24px -18px rgb(60 40 20 / 0.45);
+}
+
+.dark figure.shiki {
+  background-color: #181616;
+  box-shadow: 0 10px 30px -18px rgb(0 0 0 / 0.8);
+}
+
+figure.shiki > div:first-child:has(figcaption) {
+  border-bottom: 1px solid var(--color-fd-border);
+  background: color-mix(in oklab, var(--color-kinari) 70%, transparent);
+}
+
+.dark figure.shiki > div:first-child:has(figcaption) {
+  background: #1f1c19;
+}
+
+figure.shiki figcaption {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--color-fd-muted-foreground);
+}
+
+figure.shiki pre,
+figure.shiki code {
+  font-family: var(--font-mono);
+  font-variant-ligatures: none;
+}
+
+/* ── Callouts: paper slips pinned with a coloured tab ────────────────── */
+
+.prose [style*='--callout-color'],
+[style*='--callout-color'] {
+  border-radius: 3px;
+  box-shadow: none;
+  background:
+    linear-gradient(90deg, color-mix(in oklab, var(--callout-color) 9%, transparent), transparent 60%),
+    var(--color-fd-card);
+  border-color: color-mix(in oklab, var(--callout-color) 30%, var(--color-fd-border));
+}
+
+/* ── Cards: 絵馬 ema plaques ─────────────────────────────────────────── */
+
+[data-card='true'] {
+  position: relative;
+  border-radius: 4px;
+  background: var(--color-fd-card);
+  border-color: var(--color-fd-border);
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+  overflow: hidden;
+}
+
+[data-card='true']::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 2.5rem;
+  height: 2.5rem;
+  background: var(--color-shu);
+  clip-path: polygon(100% 0, 0 0, 100% 100%);
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+[data-card='true']:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in oklab, var(--color-shu) 55%, transparent);
+  box-shadow: 0 14px 28px -20px rgb(80 40 20 / 0.55);
+  background: var(--color-fd-card);
+}
+
+[data-card='true']:hover::after {
+  opacity: 0.9;
+}
+
+[data-card='true'] h3 {
+  font-family: var(--font-display);
+  font-weight: 800;
+}
+
+/* ── Steps: kanji numerals in vermilion seals ────────────────────────── */
+
+.fd-step::before {
+  content: counter(step, cjk-decimal) !important;
+  font-family: var(--font-display) !important;
+  font-weight: 800;
+  font-size: 1rem !important;
+  background-color: var(--color-shu) !important;
+  color: #fff8ee !important;
+  border-radius: 5px !important;
+  box-shadow:
+    0 0 0 3px var(--color-fd-background),
+    inset 0 0 0 1.5px rgb(255 248 238 / 0.55);
+}
+
+.fd-steps {
+  border-inline-start-style: dashed;
+  border-inline-start-color: color-mix(in oklab, var(--color-shu) 40%, transparent);
+}
+
+/* ── Table of contents ───────────────────────────────────────────────── */
+
+#nd-toc h3,
+#nd-toc-title {
+  font-family: var(--font-display);
+  font-weight: 800;
+}
+
+#nd-toc a[data-active='true'] {
+  color: var(--color-shu);
+}
+
+/* ── Tabs & type tables ──────────────────────────────────────────────── */
+
+[role='tablist'] [role='tab'][data-state='active'],
+[role='tablist'] [role='tab'][aria-selected='true'] {
+  color: var(--color-shu);
+  border-color: var(--color-shu);
+}
+
+/* ── Landing page ─────────────────────────────────────────────────────── */
+
+.seigaiha {
+  background-image: var(--seigaiha);
+  background-size: 48px 24px;
+}
+
+.asanoha {
+  background-image: var(--asanoha);
+  background-size: 40px 69.28px;
+}
+
+.vertical-ja {
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  font-family: var(--font-display);
+  font-weight: 800;
+}
+
+.hanko {
+  display: inline-grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-weight: 800;
+  color: #fff8ee;
+  background: var(--color-shu);
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 2px rgb(255 248 238 / 0.65), inset 0 0 0 4px var(--color-shu);
+}
+
+.btn-shu {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.8rem 1.35rem;
+  font-weight: 700;
+  color: #fff8ee;
+  background: var(--color-shu);
+  border-radius: 3px;
+  box-shadow:
+    inset 0 -3px 0 rgb(0 0 0 / 0.18),
+    0 10px 20px -12px var(--color-shu);
+  transition:
+    transform 140ms ease,
+    background-color 140ms ease;
+}
+
+.btn-shu:hover {
+  transform: translateY(-1px);
+  background: color-mix(in oklab, var(--color-shu) 88%, black);
+}
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.8rem 1.35rem;
+  font-weight: 700;
+  border: 1px solid color-mix(in oklab, var(--color-fd-foreground) 25%, transparent);
+  border-radius: 3px;
+  transition:
+    border-color 140ms ease,
+    color 140ms ease;
+}
+
+.btn-ghost:hover {
+  border-color: var(--color-shu);
+  color: var(--color-shu);
+}
+
+.station-road {
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--color-fd-muted-foreground) 0 10px,
+    transparent 10px 18px
+  );
+  height: 2px;
+  opacity: 0.45;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .stamp-in {
+    animation: stamp-in 700ms cubic-bezier(0.2, 0.9, 0.3, 1.25) both;
+    animation-delay: 150ms;
+  }
+
+  @keyframes stamp-in {
+    from {
+      opacity: 0;
+      transform: scale(1.35) rotate(-14deg);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1) rotate(-4deg);
+    }
+  }
+}

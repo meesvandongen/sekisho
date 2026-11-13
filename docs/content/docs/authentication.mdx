@@ -1,0 +1,52 @@
+---
+title: Authentication
+description: How Sekisho verifies the inbound bearer JWT on every request.
+icon: KeyRound
+---
+
+Every listed operation requires an `Authorization: Bearer <JWT>` header. Sekisho verifies the token locally before any policy runs.
+
+## What is verified
+
+- **Signature**, against keys from the issuer's JWKS.
+- **Issuer**, which must match `oidc.issuer` exactly.
+- **Audience**, which must contain `oidc.audience`.
+- **Expiry**.
+- **Algorithm**, against an allowlist.
+
+Missing, malformed or repeated `Authorization` headers are rejected.
+
+```json title="config.json"
+{
+  "oidc": {
+    "issuer": "https://issuer.example",
+    "audience": "proxy-audience",
+    "algorithms": ["RS256"]
+  }
+}
+```
+
+## Key discovery
+
+By default Sekisho discovers the JWKS URI from `oidc.issuer` at startup. Set `oidc.jwks_uri` to skip discovery. Keys are cached by the OIDC verifier; issuer and JWKS responses are capped at 1 MiB.
+
+## Algorithms
+
+The default allowlist is `["RS256"]`. `oidc.algorithms` can explicitly allow other asymmetric algorithms:
+
+`RS256` `RS384` `RS512` `PS256` `PS384` `PS512` `ES256` `ES384` `ES512` `EdDSA`
+
+## Opaque tokens
+
+Opaque inbound tokens are **not** supported. An optional [RFC 7662 introspection](/docs/identity#introspection) check can _supplement_ local JWT verification for routes whose policy asks for it — it never replaces it.
+
+## Failure codes
+
+| Code | Status | Meaning |
+| --- | --- | --- |
+| `auth_missing` | 401 | No `Authorization` header. |
+| `auth_malformed` | 401 | Not a single, well-formed bearer token. |
+| `auth_expired` | 401 | The token has expired. |
+| `auth_invalid` | 401 | Signature, issuer, audience or other verification failure. |
+| `claims_invalid` | 401 | Claims could not be decoded, or the `scope`/`scp` claim is malformed. |
+| `insufficient_scope` | 403 | A route's `required_scopes` are not all present. |

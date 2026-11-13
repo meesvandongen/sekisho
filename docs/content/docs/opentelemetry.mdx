@@ -1,0 +1,58 @@
+---
+title: OpenTelemetry
+description: Compile-time instrumentation, spans, metrics and privacy considerations.
+icon: Activity
+---
+
+Sekisho is instrumented at build time by the pinned [Go compile-time instrumentation tool](https://opentelemetry.io/docs/zero-code/go/compile-time/) (`otelc`). The SDK initializes **before** the gateway reads its config, so OpenTelemetry is configured with environment variables set before launch — not in the JSON file.
+
+```sh
+OTEL_SERVICE_NAME=sekisho
+OTEL_EXPORTER_OTLP_ENDPOINT=https://collector.internal.example:4318
+OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+OTEL_TRACES_EXPORTER=otlp
+OTEL_METRICS_EXPORTER=otlp
+OTEL_LOGS_EXPORTER=none
+```
+
+Standard per-signal endpoints, exporter headers, sampling, resources, batch and interval settings work as usual.
+
+- `OTEL_SDK_DISABLED=true` disables the injected SDK and hooks.
+- `OTEL_GO_ENABLED_INSTRUMENTATIONS` / `OTEL_GO_DISABLED_INSTRUMENTATIONS` select compiled-in hooks at runtime. `nethttp` controls both the HTTP client and server hooks.
+- Disabling only the trace exporter does not disable metrics.
+
+With the SDK disabled, or with a plain `go build`, audit logs and outcome responses still work, but no spans or metrics are exported.
+
+## Traces
+
+The HTTP server hook creates the request span. Sekisho adds its outcome, decision phase, response status, operation ID and OpenAPI route template, and names the span `METHOD /openapi/{template}`.
+
+The HTTP client hook adds dependency spans and propagates context to the upstream. Caller baggage is removed before backend authentication and forwarding. JWKS refreshes may form separate traces because the OIDC library detaches its key-fetch context.
+
+## Metrics
+
+| Metric | Type |
+| --- | --- |
+| `proxy.requests` | Counter |
+| `proxy.request.duration` | Histogram (seconds, with sub-second buckets) |
+| `proxy.requests.active` | Up/down counter |
+
+Request count and latency are labelled with OpenAPI route templates (or `unmatched`), normalized HTTP methods, status and outcome codes. `otelc` also collects Go runtime metrics by default.
+
+Audit logs are JSON on stderr rather than an OTLP log exporter; correlate them with traces using `trace_id`.
+
+## Privacy
+
+<Callout type="error" title="URLs end up in spans">
+  Default `otelc` HTTP spans can contain `url.path`, `url.query` and the outbound `url.full`. Query redaction covers only a short, case-sensitive set of signature keys — **not** arbitrary `token` or `secret` parameters — and debug logging can print an unredacted URL.
+</Callout>
+
+- Don't place secrets in request paths, query strings, or token-endpoint URLs.
+- The standard HTTP hooks don't record `Authorization` headers or bodies by default.
+- If your deployment can't permit URL attributes, disable `nethttp` (which also removes the automatic request and client spans) or supply custom instrumentation rules.
+
+Sekisho's own metrics and audit fields stay bounded and never contain raw URLs.
+
+## Shutdown
+
+`otelc` flushes telemetry on `SIGINT`/`SIGTERM`, but its signal hook can run before Sekisho finishes draining in-flight requests. Allow your collector a grace period, and don't rely on the last span as a durable audit record.
