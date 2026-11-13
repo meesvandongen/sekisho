@@ -1,0 +1,4 @@
+*
+!gateway/
+gateway/.otelc-build/
+gateway/sekisho

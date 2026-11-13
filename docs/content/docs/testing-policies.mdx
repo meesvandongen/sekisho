@@ -7,11 +7,36 @@ icon: FlaskConical
 Sekisho can evaluate your configuration against JSON fixtures without starting a listener, contacting the issuer, fetching backend tokens or loading client secrets:
 
 ```sh
-cd gateway
-go run -buildvcs=false . -config examples/config.json -test-policies policy-tests.json
+sekisho -config examples/config.json -test-policies policy-tests.json
 ```
 
 The fixture path is relative to the config file. Output is one JSON result per case with a `passed` field, and the command exits non-zero on any mismatch — ready for CI.
+
+<Callout type="info" title="Quiet output">
+  The OpenTelemetry runtime logs a few startup lines to stdout. Set `OTEL_LOG_LEVEL=warn` when another program parses the results.
+</Callout>
+
+## Running in CI
+
+The [container image](/installation#container-image) runs the fixtures without installing anything else. In GitHub Actions, with your configuration in `sekisho/`:
+
+```yaml title=".github/workflows/policies.yml"
+name: Policies
+on: pull_request
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Run policy fixtures
+        run: |
+          docker run --rm -e OTEL_LOG_LEVEL=warn \
+            -v "$PWD/sekisho:/etc/sekisho:ro" \
+            ghcr.io/meesvandongen/sekisho:1 \
+            -config /etc/sekisho/config.json -test-policies policy-tests.json
+```
+
+Pin the same image tag you deploy, so CI evaluates policies exactly as production does.
 
 ## Fixture format
 

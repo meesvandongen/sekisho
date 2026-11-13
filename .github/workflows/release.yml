@@ -1,0 +1,115 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  binaries:
+    name: Binaries
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: gateway
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: gateway/go.mod
+          cache-dependency-path: gateway/go.sum
+      - run: go test ./...
+      - run: go run -buildvcs=false . -config examples/config.json -test-policies policy-tests.json
+      - name: Build release archives
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          dist="$GITHUB_WORKSPACE/dist"
+          mkdir -p "$dist"
+          # Build otelc for the runner once; `go tool otelc` would build it for GOOS/GOARCH.
+          otelc="$RUNNER_TEMP/otelc"
+          go build -o "$otelc" go.opentelemetry.io/otelc/tool/cmd/otelc
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
+            os="${target%/*}"
+            arch="${target#*/}"
+            name="sekisho_${os}_${arch}"
+            ext=""
+            if [ "$os" = windows ]; then ext=".exe"; fi
+            stage="$RUNNER_TEMP/$name"
+            mkdir -p "$stage"
+            echo "::group::$name"
+            CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
+              "$otelc" go build -buildvcs=false -trimpath \
+                -ldflags "-s -w -X main.version=$VERSION" \
+                -o "$stage/sekisho$ext" .
+            cp -R examples "$stage/examples"
+            if [ "$os" = windows ]; then
+              (cd "$RUNNER_TEMP" && zip -qr "$dist/$name.zip" "$name")
+            else
+              tar -C "$RUNNER_TEMP" -czf "$dist/$name.tar.gz" "$name"
+            fi
+            echo "::endgroup::"
+          done
+          (cd "$dist" && sha256sum * > checksums.txt)
+      - name: Smoke-test the Linux binary
+        run: |
+          mkdir -p "$RUNNER_TEMP/smoke"
+          tar -xzf ../dist/sekisho_linux_amd64.tar.gz -C "$RUNNER_TEMP/smoke"
+          cd "$RUNNER_TEMP/smoke/sekisho_linux_amd64"
+          ./sekisho -version
+          ./sekisho -config examples/config.json -test-policies policy-tests.json
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          prerelease=""
+          case "$TAG" in *-*) prerelease="--prerelease" ;; esac
+          gh release create "$TAG" ../dist/* --title "$TAG" --generate-notes --verify-tag $prerelease
+
+  image:
+    name: Container image
+    needs: binaries
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}},enable=${{ !startsWith(github.ref_name, 'v0.') }}
+          labels: |
+            org.opencontainers.image.title=Sekisho
+            org.opencontainers.image.description=OIDC policy gateway
+            org.opencontainers.image.url=https://sekisho.mvd.im
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          build-args: VERSION=${{ github.ref_name }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -1,20 +1,29 @@
 ---
 title: Quickstart
-description: Build Sekisho with compile-time OpenTelemetry and run it against the example configuration.
+description: Install Sekisho, check the example configuration offline, and run the gateway.
 icon: Rocket
 ---
-
-Sekisho lives in the [`gateway/`](https://github.com/meesvandongen/sekisho/tree/main/gateway) directory of the repository and requires **Go 1.26 or newer**.
 
 <Steps>
 <Step>
 
+### Install
+
+Download a [release binary](/installation#release-binaries) or pull the [container image](/installation#container-image). No Go toolchain is needed.
+
+```sh
+docker pull ghcr.io/meesvandongen/sekisho
+```
+
+</Step>
+<Step>
+
 ### Copy the examples
 
-Start from [`examples/config.json`](https://github.com/meesvandongen/sekisho/blob/main/gateway/examples/config.json) and [`examples/api.yaml`](https://github.com/meesvandongen/sekisho/blob/main/gateway/examples/api.yaml), then point them at your issuer and API.
+Every release archive ships the example configuration in its `examples/` directory; the container image has it at `/etc/sekisho`. You can also copy [`config.json`](https://github.com/meesvandongen/sekisho/blob/main/gateway/examples/config.json) and [`api.yaml`](https://github.com/meesvandongen/sekisho/blob/main/gateway/examples/api.yaml) from the repository. Point them at your issuer and API.
 
 <Files>
-  <Folder name="gateway/examples" defaultOpen>
+  <Folder name="examples" defaultOpen>
     <File name="config.json" />
     <File name="api.yaml" />
     <File name="policy-tests.json" />
@@ -25,6 +34,32 @@ Start from [`examples/config.json`](https://github.com/meesvandongen/sekisho/blo
 </Files>
 
 Paths inside the JSON config — the OpenAPI file, CEL files and private key files — are resolved **relative to the config file**.
+
+</Step>
+<Step>
+
+### Check it offline
+
+Before contacting an issuer, print the [effective policy](/policies#explaining-the-effective-policy) of every operation and run the [policy fixtures](/testing-policies):
+
+<Tabs items={['Binary', 'Docker']}>
+<Tab value="Binary">
+
+```sh
+sekisho -config examples/config.json -explain
+sekisho -config examples/config.json -test-policies policy-tests.json
+```
+
+</Tab>
+<Tab value="Docker">
+
+```sh
+docker run --rm -v "$PWD/examples:/etc/sekisho:ro" ghcr.io/meesvandongen/sekisho \
+  -config /etc/sekisho/config.json -test-policies policy-tests.json
+```
+
+</Tab>
+</Tabs>
 
 </Step>
 <Step>
@@ -40,33 +75,38 @@ export BACKEND_CLIENT_SECRET="…"
 </Step>
 <Step>
 
-### Build with `otelc`
-
-The [Go compile-time instrumentation tool](https://opentelemetry.io/docs/zero-code/go/compile-time/) is pinned in `go.mod`. Building through it injects the OpenTelemetry SDK and the supported instrumentations:
-
-```sh
-cd gateway
-go tool otelc go build -buildvcs=false -o sekisho .
-```
-
-</Step>
-<Step>
-
 ### Run
+
+[OpenTelemetry](/opentelemetry) is configured with standard environment variables:
+
+<Tabs items={['Binary', 'Docker']}>
+<Tab value="Binary">
 
 ```sh
 OTEL_SERVICE_NAME=sekisho \
 OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
 OTEL_LOGS_EXPORTER=none \
-./sekisho -config examples/config.json
+sekisho -config examples/config.json
 ```
+
+</Tab>
+<Tab value="Docker">
+
+```sh
+docker run --rm -p 8080:8080 \
+  -v "$PWD/examples:/etc/sekisho:ro" \
+  -e BACKEND_CLIENT_SECRET \
+  -e OTEL_SERVICE_NAME=sekisho \
+  -e OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4318 \
+  -e OTEL_LOGS_EXPORTER=none \
+  ghcr.io/meesvandongen/sekisho
+```
+
+</Tab>
+</Tabs>
 
 </Step>
 </Steps>
-
-<Callout type="info" title="Plain builds work too">
-  `go run .` or `go build .` produce a working gateway, but it emits no OpenTelemetry signals. Audit logs and outcome headers work either way.
-</Callout>
 
 ## Startup is strict
 
@@ -84,3 +124,4 @@ Configuration is validated once, at startup, and changes require a restart. Seki
 | `-config <file>` | Path to the JSON configuration file. Required. |
 | `-test-policies <file>` | Run [offline policy fixtures](/testing-policies) (relative to the config file) instead of serving. |
 | `-explain` | Print the [effective policy](/policies#explaining-the-effective-policy) of every operation instead of serving. |
+| `-version` | Print the version and exit. |

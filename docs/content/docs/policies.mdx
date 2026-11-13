@@ -168,7 +168,7 @@ body.amount <= params.max
 Because bindings stack, the policy for one operation can come from several places. `-explain` prints it per operation and exits, without contacting the issuer:
 
 ```sh
-go run -buildvcs=false . -config examples/config.json -explain
+sekisho -config examples/config.json -explain
 ```
 
 ```text
@@ -178,7 +178,7 @@ POST /items (createItem)
   checks:  routes[0] baseline → routes[2] create_item
 ```
 
-Checks are listed in evaluation order. Commit the output, or diff it in review, to see exactly what a config change does to each operation.
+Checks are listed in evaluation order. Commit the output, or diff it in review, to see exactly what a config change does to each operation. Set `OTEL_LOG_LEVEL=warn` to keep OpenTelemetry startup lines out of the file.
 
 ## Limits
 
