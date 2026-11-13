@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "sekisho-docs",
+  "name": "sekisho",
   "compatibility_date": "2026-11-01",
   // Static-assets-only Worker: `next build` exports the site to ./out.
   "assets": {
@@ -15,7 +15,8 @@
     }
   ],
   "workers_dev": false,
-  "preview_urls": false,
+  // Worker Previews for non-production branches (Workers Builds).
+  "previews": {},
   "observability": {
     "enabled": true
   }
