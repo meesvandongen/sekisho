@@ -6,8 +6,6 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "preview": "wrangler dev",
-    "deploy": "next build && wrangler deploy",
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
@@ -31,7 +29,6 @@
     "postcss": "^8.5.32",
     "shiki": "4.6.0",
     "tailwindcss": "^4.3.5",
-    "typescript": "^7.0.2",
-    "wrangler": "^4.161.0"
+    "typescript": "^7.0.2"
   }
 }

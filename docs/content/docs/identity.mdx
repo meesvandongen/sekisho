@@ -38,7 +38,7 @@ userinfo.email_verified == true
 
 Performs an authenticated [RFC 7662](https://www.rfc-editor.org/rfc/rfc7662) `POST` — never a token-in-URL `GET`. The response must have `active: true`; `sub` and `exp` are checked when present. `token_type_hint` is optional, for providers that require one.
 
-Introspection supports the same `client_secret_basic`, `client_secret_post` and `private_key_jwt` credentials as [backend authentication](/docs/backend-auth#client-authentication).
+Introspection supports the same `client_secret_basic`, `client_secret_post` and `private_key_jwt` credentials as [backend authentication](/backend-auth#client-authentication).
 
 <Callout type="info">
   Introspection is an _additional_ check on a JWT already validated locally — not a way to accept opaque tokens.

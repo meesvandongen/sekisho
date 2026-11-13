@@ -19,7 +19,6 @@ export const metadata: Metadata = {
   openGraph: {
     siteName: appName,
     type: 'website',
-    images: '/og/home.png',
   },
   twitter: { card: 'summary_large_image' },
 };

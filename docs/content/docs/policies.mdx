@@ -75,7 +75,7 @@ Every binding needs an explicit `auth.backend`:
 | `"default"` | Use the top-level `backend_auth` credential. |
 | _profile name_ | Use the named profile from `backend_auth_profiles`. |
 
-`auth.required_scopes` is an optional **all-of** list checked before the policy. See [backend authentication](/docs/backend-auth).
+`auth.required_scopes` is an optional **all-of** list checked before the policy. See [backend authentication](/backend-auth).
 
 ### `params`
 
@@ -87,7 +87,7 @@ Customize what happens when the check evaluates to `false`:
 
 - `response.status` — `401`, `403` (default) or `404`.
 - `response.code` and `response.detail` — bounded static text returned in the problem document.
-- `log.reason`, `log.message` and `log.level` (`info`, `warn`, `error`) — customize the [audit event](/docs/audit).
+- `log.reason`, `log.message` and `log.level` (`info`, `warn`, `error`) — customize the [audit event](/audit).
 
 <Callout type="warn" title="Static text only">
   Never interpolate caller input into denial text or logs.

@@ -20,8 +20,8 @@ icon: Braces
 | `operation_id` | The operation ID, or an empty string. |
 | `config` | The shared `policy.values` map. |
 | `params` | Binding and reference parameters. |
-| `userinfo` | The [userinfo](/docs/identity#userinfo) response. Fetched only when evaluated. |
-| `introspection` | The [introspection](/docs/identity#introspection) response. Fetched only when evaluated. |
+| `userinfo` | The [userinfo](/identity#userinfo) response. Fetched only when evaluated. |
+| `introspection` | The [introspection](/identity#introspection) response. Fetched only when evaluated. |
 
 ```cel title="example.cel"
 claims.sub == "publisher" &&
@@ -54,4 +54,4 @@ Inputs are resolved lazily and memoized for the duration of a request.
 
 ## Failing closed
 
-Missing fields, lookup failures and evaluation errors **deny** the request — even when an `any` or `||` could otherwise have returned `true`. The resulting codes are listed under [outcomes](/docs/outcomes).
+Missing fields, lookup failures and evaluation errors **deny** the request — even when an `any` or `||` could otherwise have returned `true`. The resulting codes are listed under [outcomes](/outcomes).

@@ -5,7 +5,11 @@
   "scripts": {
     "dev": "pnpm --filter @sekisho/docs dev",
     "build": "pnpm --filter @sekisho/docs build",
-    "deploy": "pnpm --filter @sekisho/docs deploy",
-    "typecheck": "pnpm --filter @sekisho/docs typecheck"
+    "typecheck": "pnpm --filter @sekisho/docs typecheck",
+    "preview": "wrangler dev",
+    "deploy": "pnpm build && wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.161.0"
   }
 }

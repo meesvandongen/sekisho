@@ -2,9 +2,9 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "sekisho",
   "compatibility_date": "2026-11-01",
-  // Static-assets-only Worker: `next build` exports the site to ./out.
+  // Docs site: a static-assets-only Worker. `pnpm build` exports docs/ to docs/out.
   "assets": {
-    "directory": "./out",
+    "directory": "./docs/out",
     "html_handling": "auto-trailing-slash",
     "not_found_handling": "404-page"
   },

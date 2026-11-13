@@ -9,9 +9,9 @@
 
 <p align="center">
   <b>Every request passes the gate.</b><br>
-  <a href="https://sekisho.mvd.im/docs">Documentation</a> ·
-  <a href="https://sekisho.mvd.im/docs/quickstart">Quickstart</a> ·
-  <a href="https://sekisho.mvd.im/docs/configuration">Configuration</a>
+  <a href="https://sekisho.mvd.im">Documentation</a> ·
+  <a href="https://sekisho.mvd.im/quickstart">Quickstart</a> ·
+  <a href="https://sekisho.mvd.im/configuration">Configuration</a>
 </p>
 
 ---
@@ -24,7 +24,7 @@ go tool otelc go build -buildvcs=false -o sekisho .
 ./sekisho -config examples/config.json
 ```
 
-Requires Go 1.26+. See the [quickstart](https://sekisho.mvd.im/docs/quickstart) for secrets and OpenTelemetry settings.
+Requires Go 1.26+. See the [quickstart](https://sekisho.mvd.im/quickstart) for secrets and OpenTelemetry settings.
 
 ## Repository
 
