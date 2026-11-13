@@ -16,7 +16,7 @@
 
 ---
 
-Sekisho is an OIDC-aware policy gateway. It verifies inbound JWTs, requires an explicit [CEL](https://cel.dev) policy binding for every operation in a local OpenAPI 3 spec, and forwards allowed requests to a single upstream — using least-privilege backend credentials, never the caller's token.
+Sekisho is an OIDC-aware policy gateway. It verifies inbound JWTs, requires every operation in a local OpenAPI 3 spec to be covered by composable [CEL](https://cel.dev) policies, and forwards allowed requests to a single upstream — using least-privilege backend credentials, or the caller's token only where a route opts in.
 
 ```sh
 cd gateway

@@ -94,7 +94,7 @@ See [policies](/policies).
   type={{
     definitions: { type: 'Record<string, Rule>', description: 'Named reusable rules.' },
     values: { type: 'Record<string, any>', description: 'Shared values, available to CEL as config.' },
-    routes: { type: 'Route[]', required: true, description: 'Exactly one binding per OpenAPI operation.' },
+    routes: { type: 'Route[]', required: true, description: 'Bindings; every operation must be matched by at least one with a check.' },
   }}
 />
 
@@ -118,11 +118,29 @@ Exactly one of:
 <TypeTable
   type={{
     name: { type: 'string', description: 'Binding name, reported in audit events.' },
-    match: { type: '{ operation_id } | { path, method }', required: true, description: 'Selects one OpenAPI operation.' },
-    check: { type: 'Rule', required: true, description: 'Must evaluate to true to forward the request.' },
-    params: { type: 'Record<string, any>', description: 'Parameters available to CEL as params.' },
-    auth: { type: '{ backend, required_scopes? }', required: true, description: 'backend is "none", "default" or a profile name.' },
-    on_deny: { type: '{ response?, log? }', description: 'Custom status (401/403/404), code, detail and audit log fields for a false check.' },
+    match: { type: '"*" | Matcher', required: true, description: 'Selects the OpenAPI operations this binding applies to.' },
+    check: { type: 'Rule', description: 'Must evaluate to true to forward the request. Required unless the binding only sets auth.' },
+    params: { type: 'Record<string, any>', description: 'Parameters available to CEL as params. Requires check.' },
+    auth: { type: '{ backend?, required_scopes? }', description: 'backend is "none", "forward", "default" or a profile name; the narrowest matching binding that sets it wins.' },
+    on_deny: { type: '{ response?, log? }', description: 'Custom status (401/403/404), code, detail and audit log fields for a false check. Requires check.' },
+  }}
+/>
+
+### Matcher
+
+All keys must hold; list values match any entry. See [`match`](/policies#match).
+
+<TypeTable
+  type={{
+    operation_id: { type: 'string | string[]' },
+    method: { type: 'string | string[]' },
+    path: { type: 'string | string[]', description: 'OpenAPI path template.' },
+    path_prefix: { type: 'string | string[]', description: 'Template prefix, compared by whole segments.' },
+    tag: { type: 'string | string[]' },
+    extension: { type: 'Record<string, any>', description: 'x- vendor extensions that must equal the given values.' },
+    all: { type: '("*" | Matcher)[]' },
+    any: { type: '("*" | Matcher)[]' },
+    not: { type: '"*" | Matcher' },
   }}
 />
 

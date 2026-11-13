@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -23,21 +24,65 @@ func TestPolicyCoverageAndSelectors(t *testing.T) {
 		name, want string
 		change     func(*Config)
 	}{
-		{"missing all bindings", "missing policy bindings", func(c *Config) { c.Policy = PolicyConfig{} }},
+		{"missing all bindings", "not matched by any binding with a check", func(c *Config) { c.Policy = PolicyConfig{} }},
 		{"uncovered operation", "GET /items/{id}", func(c *Config) { c.Policy.Routes = c.Policy.Routes[:2] }},
-		{"duplicate binding", "multiple policy bindings", func(c *Config) {
+		{"backend-only coverage", "not matched by any binding with a check: GET /items", func(c *Config) {
+			c.Policy.Routes[0].Check = nil
+		}},
+		{"unknown path", "unknown OpenAPI path", func(c *Config) {
+			c.Policy.Routes[0].Match = PolicyMatcher{Path: stringList{"/missing"}, Method: stringList{"GET"}}
+		}},
+		{"unknown operationId", "unknown operationId", func(c *Config) {
+			c.Policy.Routes[0].Match = PolicyMatcher{OperationID: stringList{"listItems", "typo"}}
+		}},
+		{"unknown tag", "unknown OpenAPI tag", func(c *Config) {
+			c.Policy.Routes[0].Match = PolicyMatcher{Tag: stringList{"missing"}}
+		}},
+		{"unknown method", "unknown HTTP method", func(c *Config) {
+			c.Policy.Routes[0].Match = PolicyMatcher{Method: stringList{"FETCH"}}
+		}},
+		{"relative prefix", "must start with /", func(c *Config) {
+			c.Policy.Routes[0].Match = PolicyMatcher{PathPrefix: stringList{"items"}}
+		}},
+		{"extension key", "must start with x-", func(c *Config) {
+			c.Policy.Routes[0].Match = PolicyMatcher{Extension: map[string]any{"tier": "internal"}}
+		}},
+		{"empty matcher", "at least one condition", func(c *Config) {
+			c.Policy.Routes[0].Match = PolicyMatcher{}
+		}},
+		{"empty list", "requires at least one value", func(c *Config) {
+			c.Policy.Routes[0].Match = PolicyMatcher{OperationID: stringList{}}
+		}},
+		{"empty any", "any requires at least one matcher", func(c *Config) {
+			c.Policy.Routes[0].Match = PolicyMatcher{Any: []PolicyMatcher{}}
+		}},
+		{"matches nothing", "selects no OpenAPI operations", func(c *Config) {
+			c.Policy.Routes[0].Match = PolicyMatcher{Path: stringList{"/items"}, Method: stringList{"DELETE"}}
+		}},
+		{"deep matcher", "depth or node limit", func(c *Config) {
+			matcher := PolicyMatcher{Wildcard: true}
+			for range maxMatcherDepth + 1 {
+				matcher = PolicyMatcher{Not: &matcher}
+			}
+			c.Policy.Routes[0].Match = matcher
+		}},
+		{"binding without effect", "needs a check, auth.backend or auth.required_scopes", func(c *Config) {
+			c.Policy.Routes = append(c.Policy.Routes, RoutePolicyConfig{Match: PolicyMatcher{Wildcard: true}})
+		}},
+		{"on_deny without check", "require a check", func(c *Config) {
 			c.Policy.Routes = append(c.Policy.Routes, RoutePolicyConfig{
-				Match: PolicySelector{Path: "/items", Method: http.MethodGet},
-				Check: PolicyRule{CEL: "true"}, Auth: RouteAuthConfig{Backend: "none"},
+				Match: PolicyMatcher{Wildcard: true}, Auth: RouteAuthConfig{RequiredScopes: []string{"a"}},
+				OnDeny: DenyConfig{Response: DenyResponseConfig{Status: 404}},
 			})
 		}},
-		{"unknown path", "unknown OpenAPI path/method", func(c *Config) {
-			c.Policy.Routes[0].Match = PolicySelector{Path: "/missing", Method: http.MethodGet}
+		{"missing backend selection", "no matching binding sets auth.backend", func(c *Config) {
+			c.Policy.Routes[0].Auth.Backend = ""
 		}},
-		{"ambiguous selector", "not both", func(c *Config) {
-			c.Policy.Routes[0].Match.Path = "/items"
-		}},
-		{"missing backend selection", "backend must explicitly select", func(c *Config) {
+		{"conflicting backends", "neither is narrower", func(c *Config) {
+			c.Policy.Routes = append(c.Policy.Routes,
+				RoutePolicyConfig{Match: PolicyMatcher{Path: stringList{"/items"}}, Auth: RouteAuthConfig{Backend: "forward"}},
+				RoutePolicyConfig{Match: PolicyMatcher{Method: stringList{"GET"}}, Auth: RouteAuthConfig{Backend: "none"}},
+			)
 			c.Policy.Routes[0].Auth.Backend = ""
 		}},
 		{"default backend absent", "backend default is not configured", func(c *Config) {
@@ -50,7 +95,7 @@ func TestPolicyCoverageAndSelectors(t *testing.T) {
 			c.Policy.Routes[0].Auth.RequiredScopes = []string{"read item"}
 		}},
 		{"unknown reference", "unknown policy reference", func(c *Config) {
-			c.Policy.Routes[0].Check = PolicyRule{Ref: "missing"}
+			c.Policy.Routes[0].Check = &PolicyRule{Ref: "missing"}
 		}},
 		{"cyclic definitions", "cycle in policy reference", func(c *Config) {
 			c.Policy.Definitions = map[string]PolicyRule{"a": {Ref: "b"}, "b": {Ref: "a"}}
@@ -62,16 +107,16 @@ func TestPolicyCoverageAndSelectors(t *testing.T) {
 				c.Policy.Definitions[fmt.Sprintf("level_%d", depth)] =
 					PolicyRule{All: []PolicyRule{{Ref: previous}, {Ref: previous}}}
 			}
-			c.Policy.Routes[0].Check = PolicyRule{Ref: "level_9"}
+			c.Policy.Routes[0].Check = &PolicyRule{Ref: "level_9"}
 		}},
 		{"empty composition", "requires at least one child", func(c *Config) {
-			c.Policy.Routes[0].Check = PolicyRule{All: []PolicyRule{}}
+			c.Policy.Routes[0].Check = &PolicyRule{All: []PolicyRule{}}
 		}},
 		{"ambiguous rule", "exactly one", func(c *Config) {
-			c.Policy.Routes[0].Check = PolicyRule{CEL: "true", Ref: "unknown"}
+			c.Policy.Routes[0].Check = &PolicyRule{CEL: "true", Ref: "unknown"}
 		}},
 		{"file missing", "open policy file", func(c *Config) {
-			c.Policy.Routes[0].Check = PolicyRule{File: filepath.Join(t.TempDir(), "missing.cel")}
+			c.Policy.Routes[0].Check = &PolicyRule{File: filepath.Join(t.TempDir(), "missing.cel")}
 		}},
 		{"userinfo unconfigured", "unconfigured userinfo", func(c *Config) {
 			setTestPolicy(t, c, "listItems", `userinfo.sub == "alice"`)
@@ -134,8 +179,8 @@ paths:
 		t.Fatal(err)
 	}
 	cfg.Policy.Routes = []RoutePolicyConfig{{
-		Match: PolicySelector{Path: "/deliveries/{id}", Method: http.MethodPost},
-		Check: PolicyRule{CEL: `operation.tags == ["publish", "artifacts"] &&
+		Match: PolicyMatcher{Path: stringList{"/deliveries/{id}"}, Method: stringList{http.MethodPost}},
+		Check: &PolicyRule{CEL: `operation.tags == ["publish", "artifacts"] &&
 			operation.summary == "publish a delivery" && operation.responses["204"].description == "accepted" &&
 			!has(operation.operationId) && operation_id == "" && path_params.id == "abc"`},
 		Auth: RouteAuthConfig{Backend: "none"},
@@ -175,8 +220,8 @@ func TestNamedCompositionFilesParamsAndShortCircuit(t *testing.T) {
 		}},
 	}
 	for index := range cfg.Policy.Routes {
-		if cfg.Policy.Routes[index].Match.OperationID == "createItem" {
-			cfg.Policy.Routes[index].Check = PolicyRule{Ref: "publish"}
+		if slices.Equal(cfg.Policy.Routes[index].Match.OperationID, stringList{"createItem"}) {
+			cfg.Policy.Routes[index].Check = &PolicyRule{Ref: "publish"}
 			cfg.Policy.Routes[index].Params = map[string]any{"subject": "nobody", "max": float64(0)}
 		}
 	}
@@ -220,8 +265,8 @@ func TestPolicySkipsUnusedBody(t *testing.T) {
 	issuer := newTestIssuer(t)
 	cfg := testConfig(t, issuer, "http://127.0.0.1:8081")
 	for index := range cfg.Policy.Routes {
-		if cfg.Policy.Routes[index].Match.OperationID == "createItem" {
-			cfg.Policy.Routes[index].Check = PolicyRule{All: []PolicyRule{
+		if slices.Equal(cfg.Policy.Routes[index].Match.OperationID, stringList{"createItem"}) {
+			cfg.Policy.Routes[index].Check = &PolicyRule{All: []PolicyRule{
 				{CEL: "false"}, {CEL: `body.allowed == true`},
 			}}
 		}
@@ -292,7 +337,7 @@ func TestPolicyFileSizeLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg.Policy.Routes[0].Check = PolicyRule{File: file}
+	cfg.Policy.Routes[0].Check = &PolicyRule{File: file}
 	if _, err := newProxy(context.Background(), cfg); err == nil || !strings.Contains(err.Error(), "too large") {
 		t.Fatalf("oversized policy file was accepted: %v", err)
 	}

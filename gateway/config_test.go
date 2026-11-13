@@ -30,8 +30,8 @@ func TestInvalidProxyConfigurationFailsClosed(t *testing.T) {
 			name: "unknown policy operation", want: "unknown operationId",
 			change: func(c *Config) {
 				c.Policy.Routes = append(c.Policy.Routes, RoutePolicyConfig{
-					Match: PolicySelector{OperationID: "typo"},
-					Check: PolicyRule{CEL: "true"},
+					Match: PolicyMatcher{OperationID: stringList{"typo"}},
+					Check: &PolicyRule{CEL: "true"},
 					Auth:  RouteAuthConfig{Backend: "none"},
 				})
 			},

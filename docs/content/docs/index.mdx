@@ -13,14 +13,14 @@ It sits in front of a single upstream service, and every request travels the sam
 <Stations />
 
 <Callout title="No implicit allow">
-  Every operation in the OpenAPI document must be bound to exactly one policy. Missing, duplicate or unknown bindings stop the gateway from starting — there is no permissive fallback.
+  Routes missing from the OpenAPI document are always rejected. Every declared operation must be covered by at least one policy check and resolve to exactly one backend, or the gateway refuses to start — there is no permissive fallback. Every request that gets through has passed rules you wrote.
 </Callout>
 
 ## Why Sekisho
 
-- **Explicit by construction.** The spec, the bindings and the policies must agree at startup, so a new endpoint can't slip through unprotected.
+- **Explicit by construction.** The spec, the bindings and the policies must agree at startup, so an endpoint is only reachable once a policy covers it. Bind operations by name to make every new endpoint fail startup until reviewed, or match by tag, prefix or `"*"` to apply rules broadly.
 - **Lazy and cheap.** Request bodies, userinfo and introspection are fetched only when a selected CEL branch actually needs them; everything else streams.
-- **Least privilege upstream.** Routes pick named backend credentials, so read traffic never carries a write token.
+- **Least privilege upstream.** Routes pick named backend credentials, so read traffic never carries a write token. The caller's token is forwarded only where a route opts in.
 - **Testable offline.** Run your policies against JSON fixtures in CI without an issuer, network or secrets.
 - **Observable.** Stable outcome codes, a structured audit trail, and compile-time OpenTelemetry instrumentation.
 
@@ -28,7 +28,7 @@ It sits in front of a single upstream service, and every request travels the sam
 
 <Cards>
   <Card title="Quickstart" href="/quickstart" description="Build the gateway and run it against the example config." />
-  <Card title="Policies" href="/policies" description="Bind every operation to a composable CEL check." />
+  <Card title="Policies" href="/policies" description="Bind operations to composable CEL checks, precisely or broadly." />
   <Card title="Backend authentication" href="/backend-auth" description="Give each route the narrowest upstream credential." />
   <Card title="Configuration reference" href="/configuration" description="Every field of the JSON configuration file." />
 </Cards>

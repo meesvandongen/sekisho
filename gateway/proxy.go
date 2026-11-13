@@ -59,24 +59,25 @@ func newProxy(ctx context.Context, cfg Config) (*proxyHandler, error) {
 		return nil, err
 	}
 	backends := make(map[string]*backendAuth)
-	for _, binding := range policies.routes {
-		if binding.backendName == "none" {
+	for _, route := range policies.order {
+		switch route.backendName {
+		case "none", "forward":
 			continue
 		}
 		authConfig := cfg.BackendAuth
-		if binding.backendName != "default" {
-			authConfig = cfg.BackendAuthProfiles[binding.backendName]
+		if route.backendName != "default" {
+			authConfig = cfg.BackendAuthProfiles[route.backendName]
 		}
 		if authConfig.GrantType == "none" {
 			continue
 		}
-		if backends[binding.backendName] == nil {
-			backends[binding.backendName], err = newBackendAuth(authConfig, authClient)
+		if backends[route.backendName] == nil {
+			backends[route.backendName], err = newBackendAuth(authConfig, authClient)
 			if err != nil {
-				return nil, fmt.Errorf("backend auth profile %q: %w", binding.backendName, err)
+				return nil, fmt.Errorf("backend auth profile %q: %w", route.backendName, err)
 			}
 		}
-		binding.backend = backends[binding.backendName]
+		route.backend = backends[route.backendName]
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.MaxResponseHeaderBytes = int64(cfg.MaxHeaderBytes)
@@ -244,12 +245,12 @@ func (h *proxyHandler) serve(w http.ResponseWriter, r *http.Request, result *req
 	}
 	result.route = route.Path
 	result.operation = route.Operation.OperationID
-	binding := h.policies.forRoute(route)
-	if binding == nil {
+	compiled := h.policies.forRoute(route)
+	if compiled == nil {
 		reject(w, r, result, http.StatusInternalServerError, outcomeRoutingError)
 		return
 	}
-	result.policy = binding.name
+	result.policy = compiled.owner()
 	result.phase = "authentication"
 	rawToken, invalidHeader := bearerToken(r)
 	if invalidHeader != "" {
@@ -270,36 +271,41 @@ func (h *proxyHandler) serve(w http.ResponseWriter, r *http.Request, result *req
 		result.subjectHash = verifiedSubjectHash(token.Issuer, token.Subject)
 	}
 	inputs := &requestInputs{
-		w: w, r: r, route: route, binding: binding, pathParams: pathParams,
+		w: w, r: r, route: route, compiled: compiled, pathParams: pathParams,
 		token: token, rawToken: rawToken, values: h.policies.values,
 		sources: h.sources, maxBodyBytes: h.cfg.MaxBodyBytes,
 	}
-	if failure := inputs.requireScopes(binding.requiredScopes); failure != nil {
-		result.phase = "authorization"
-		reject(w, r, result, failure.status, failure.code)
-		return
-	}
 	result.phase = "policy"
-	allowed, failure := binding.rule.evaluate(inputs, binding.params)
-	if failure != nil {
-		result.dependencyStatus = failure.dependencyStatus
-		reject(w, r, result, failure.status, failure.code)
+	decision := compiled.decide(inputs)
+	if decision.binding != nil {
+		result.policy = decision.binding.name
+	}
+	if decision.failure != nil {
+		if decision.scopes {
+			result.phase = "authorization"
+		}
+		result.dependencyStatus = decision.failure.dependencyStatus
+		reject(w, r, result, decision.failure.status, decision.failure.code)
 		return
 	}
-	if !allowed {
-		result.reason = binding.deny.Log.Reason
-		result.logLevel = binding.deny.Log.Level
-		result.logMessage = binding.deny.Log.Message
-		code := outcomeCode(binding.deny.Response.Code)
+	if decision.denied {
+		deny := decision.binding.deny
+		result.reason = deny.Log.Reason
+		result.logLevel = deny.Log.Level
+		result.logMessage = deny.Log.Message
+		code := outcomeCode(deny.Response.Code)
 		result.code = code
-		writeProblemDetail(w, r, binding.deny.Response.Status, code, binding.deny.Response.Detail)
+		writeProblemDetail(w, r, deny.Response.Status, code, deny.Response.Detail)
 		return
 	}
 	result.phase = "backend_auth"
 	r = r.WithContext(baggage.ContextWithBaggage(r.Context(), baggage.Baggage{}))
 	r.Header.Del("Baggage")
-	if binding.backend != nil {
-		backendToken, err := binding.backend.token(r.Context(), rawToken, token.Expiry)
+	switch {
+	case compiled.backendName == "forward":
+		r.Header.Set("Authorization", "Bearer "+rawToken)
+	case compiled.backend != nil:
+		backendToken, err := compiled.backend.token(r.Context(), rawToken, token.Expiry)
 		if err != nil {
 			code := outcomeBackendInvalid
 			var tokenError *backendTokenError
@@ -311,8 +317,7 @@ func (h *proxyHandler) serve(w http.ResponseWriter, r *http.Request, result *req
 			return
 		}
 		r.Header.Set("Authorization", "Bearer "+backendToken)
-	}
-	if binding.backend == nil {
+	default:
 		r.Header.Del("Authorization")
 	}
 	if !inputs.bodyLoaded {

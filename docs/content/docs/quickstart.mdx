@@ -73,7 +73,7 @@ OTEL_LOGS_EXPORTER=none \
 Configuration is validated once, at startup, and changes require a restart. Sekisho refuses to start on any of:
 
 - unknown or duplicate fields in the JSON config;
-- invalid OpenAPI documents, or operations without a policy binding;
+- invalid OpenAPI documents, operations not covered by a policy check, or operations without a single resolvable backend;
 - policies that fail to compile or type-check;
 - missing credentials for a backend profile that a route selects.
 
@@ -83,3 +83,4 @@ Configuration is validated once, at startup, and changes require a restart. Seki
 | --- | --- |
 | `-config <file>` | Path to the JSON configuration file. Required. |
 | `-test-policies <file>` | Run [offline policy fixtures](/testing-policies) (relative to the config file) instead of serving. |
+| `-explain` | Print the [effective policy](/policies#explaining-the-effective-policy) of every operation instead of serving. |

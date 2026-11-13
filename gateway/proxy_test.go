@@ -16,6 +16,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -139,9 +140,9 @@ func testConfig(t testing.TB, issuer *testIssuer, upstream string) Config {
 			JWKSURI: issuer.server.URL + "/jwks",
 		},
 		Policy: PolicyConfig{Routes: []RoutePolicyConfig{
-			{Match: PolicySelector{OperationID: "listItems"}, Check: PolicyRule{CEL: "true"}, Auth: RouteAuthConfig{Backend: "none"}},
-			{Match: PolicySelector{OperationID: "createItem"}, Check: PolicyRule{CEL: "true"}, Auth: RouteAuthConfig{Backend: "none"}},
-			{Match: PolicySelector{OperationID: "getItem"}, Check: PolicyRule{CEL: "true"}, Auth: RouteAuthConfig{Backend: "none"}},
+			{Match: PolicyMatcher{OperationID: stringList{"listItems"}}, Check: &PolicyRule{CEL: "true"}, Auth: RouteAuthConfig{Backend: "none"}},
+			{Match: PolicyMatcher{OperationID: stringList{"createItem"}}, Check: &PolicyRule{CEL: "true"}, Auth: RouteAuthConfig{Backend: "none"}},
+			{Match: PolicyMatcher{OperationID: stringList{"getItem"}}, Check: &PolicyRule{CEL: "true"}, Auth: RouteAuthConfig{Backend: "none"}},
 		}},
 	}
 }
@@ -149,8 +150,8 @@ func testConfig(t testing.TB, issuer *testIssuer, upstream string) Config {
 func setTestPolicy(t testing.TB, cfg *Config, operationID, expression string) {
 	t.Helper()
 	for index := range cfg.Policy.Routes {
-		if cfg.Policy.Routes[index].Match.OperationID == operationID {
-			cfg.Policy.Routes[index].Check = PolicyRule{CEL: expression}
+		if slices.Equal(cfg.Policy.Routes[index].Match.OperationID, stringList{operationID}) {
+			cfg.Policy.Routes[index].Check = &PolicyRule{CEL: expression}
 			return
 		}
 	}

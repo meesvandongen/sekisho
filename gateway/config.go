@@ -111,17 +111,11 @@ type PolicyRule struct {
 
 type RoutePolicyConfig struct {
 	Name   string          `json:"name"`
-	Match  PolicySelector  `json:"match"`
-	Check  PolicyRule      `json:"check"`
+	Match  PolicyMatcher   `json:"match"`
+	Check  *PolicyRule     `json:"check"`
 	Params map[string]any  `json:"params"`
 	Auth   RouteAuthConfig `json:"auth"`
 	OnDeny DenyConfig      `json:"on_deny"`
-}
-
-type PolicySelector struct {
-	OperationID string `json:"operation_id"`
-	Path        string `json:"path"`
-	Method      string `json:"method"`
 }
 
 type RouteAuthConfig struct {
@@ -253,7 +247,7 @@ func (c *Config) normalize() error {
 		totalCacheEntries += c.BackendAuth.Cache.MaxEntries
 	}
 	for name, profile := range c.BackendAuthProfiles {
-		if name == "" || name == "default" || name == "none" {
+		if name == "" || name == "default" || name == "none" || name == "forward" {
 			return fmt.Errorf("backend_auth_profiles name %q is reserved or empty", name)
 		}
 		if err := profile.normalize(); err != nil {

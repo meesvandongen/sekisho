@@ -1,22 +1,27 @@
 ---
 title: Backend authentication
-description: Give every route the narrowest upstream credential, without ever forwarding the caller's token.
+description: Give every route the narrowest upstream credential, and forward the caller's token only where you opt in.
 icon: Ticket
 ---
 
-The inbound bearer token is **never** forwarded as the upstream `Authorization` header. Instead, each route selects a backend credential with `auth.backend`:
+The inbound bearer token is not forwarded upstream unless a route asks for it. Each operation resolves one backend credential from `auth.backend` on its matching bindings (see [backend resolution](/policies#backend-resolution)):
 
 - `"none"` forwards no `Authorization` header at all;
+- `"forward"` forwards the caller's verified bearer token as `Authorization: Bearer <token>`;
 - `"default"` uses the top-level `backend_auth`;
 - any other name selects a profile from `backend_auth_profiles`, each with its own scope, audience/resource, credentials and cache.
 
 Configure separate read and write profiles rather than requesting their union for every route.
 
+<Callout type="warn" title="Forwarding the caller's token">
+  `"forward"` hands the upstream a token whose audience is Sekisho, carrying every scope the caller was granted — so the upstream must accept that audience, and anything it calls with the token can act as the caller. Prefer `token_exchange` when the upstream should receive a narrower, upstream-specific token. `forward`, `none` and `default` are reserved and cannot be profile names.
+</Callout>
+
 Sekisho also strips `Proxy-Authorization`, `X-Forwarded-Authorization`, `X-Original-Authorization`, and inbound forwarding and correlation headers.
 
 ## Required scopes
 
-`auth.required_scopes` is an optional **all-of** list of permissions read from the verified token's `scope` string or `scp` string/array. A missing scope returns `403 insufficient_scope` **before** the policy runs, so no identity lookups are made.
+`auth.required_scopes` is an optional **all-of** list of permissions read from the verified token's `scope` string or `scp` string/array. The scopes of every binding that matches an operation are required. A missing scope returns `403 insufficient_scope` **before** any check runs, so no identity lookups are made.
 
 ```json
 { "auth": { "backend": "read", "required_scopes": ["items:read"] } }

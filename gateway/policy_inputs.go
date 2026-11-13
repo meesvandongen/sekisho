@@ -17,7 +17,7 @@ type requestInputs struct {
 	w            http.ResponseWriter
 	r            *http.Request
 	route        *routers.Route
-	binding      *compiledRoute
+	compiled     *compiledRoute
 	pathParams   map[string]string
 	token        *oidc.IDToken
 	rawToken     string
@@ -142,7 +142,7 @@ func (i *requestInputs) resolve(name string) (any, bool) {
 	case "host":
 		return i.r.Host, true
 	case "operation":
-		return i.binding.operation, true
+		return i.compiled.operation, true
 	case "operation_id":
 		return i.route.Operation.OperationID, true
 	case "config":
