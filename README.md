@@ -31,7 +31,7 @@ Requires Go 1.26+. See the [quickstart](https://sekisho.mvd.im/docs/quickstart) 
 | Path | Contents |
 | --- | --- |
 | [`gateway/`](./gateway) | The Go gateway, its tests and [example configuration](./gateway/examples). |
-| [`docs/`](./docs) | The [documentation site](https://sekisho.mvd.im) — Fumadocs on Next.js, deployed to Cloudflare Workers. |
+| [`docs/`](./docs) | The [documentation site](https://sekisho.mvd.im) — Fumadocs on Next.js, deployed to Cloudflare Workers via Workers Builds. |
 
 ```sh
 go test ./gateway/...   # gateway tests (go.work at the root)
