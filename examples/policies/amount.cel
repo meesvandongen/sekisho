@@ -1,0 +1,2 @@
+'tenant' in query && query['tenant'][0] == config.tenant &&
+body.amount <= params.max

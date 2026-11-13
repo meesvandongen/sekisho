@@ -1,0 +1,39 @@
+openapi: 3.0.3
+info:
+  title: Items API
+  version: "1.0"
+servers:
+  - url: https://api.internal.example/v1
+paths:
+  /items:
+    get:
+      operationId: listItems
+      responses:
+        "200":
+          description: Items
+    post:
+      operationId: createItem
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount:
+                  type: number
+      responses:
+        "201":
+          description: Created
+  /items/{id}:
+    get:
+      operationId: getItem
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Item

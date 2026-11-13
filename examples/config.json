@@ -1,0 +1,73 @@
+{
+  "listen": ":8080",
+  "openapi_file": "api.yaml",
+  "upstream_url": "https://api.internal.example/v1",
+  "max_header_bytes": 32768,
+  "max_body_bytes": 1048576,
+  "max_concurrent_requests": 64,
+  "oidc": {
+    "issuer": "https://issuer.example",
+    "audience": "proxy-audience",
+    "algorithms": ["RS256"]
+  },
+  "policy": {
+    "definitions": {
+      "has_subject": {"cel": "claims.sub != ''"},
+      "amount_limit": {"file": "policies/amount.cel"}
+    },
+    "values": {
+      "tenant": "blue"
+    },
+    "routes": [
+      {
+        "name": "list_items",
+        "match": {"operation_id": "listItems"},
+        "check": {"ref": "has_subject"},
+        "auth": {"backend": "read", "required_scopes": ["items:read"]}
+      },
+      {
+        "name": "create_item",
+        "match": {"operation_id": "createItem"},
+        "check": {"all": [
+          {"ref": "has_subject"},
+          {"ref": "amount_limit", "params": {"max": 5}}
+        ]},
+        "auth": {"backend": "write", "required_scopes": ["items:write"]},
+        "on_deny": {
+          "response": {"status": 403, "code": "package_denied", "detail": "The package does not satisfy the publishing policy."},
+          "log": {"reason": "publishing_policy", "level": "warn", "message": "publishing policy denied"}
+        }
+      },
+      {
+        "name": "get_item",
+        "match": {"path": "/items/{id}", "method": "GET"},
+        "check": {"all": [
+          {"ref": "has_subject"},
+          {"cel": "path_params.id != '' && operation.operationId == 'getItem'"}
+        ]},
+        "auth": {"backend": "read", "required_scopes": ["items:read"]}
+      }
+    ]
+  },
+  "audit": {
+    "enabled": true
+  },
+  "backend_auth_profiles": {
+    "read": {
+      "grant_type": "client_credentials",
+      "token_url": "https://issuer.example/oauth2/token",
+      "client_id": "backend-client",
+      "client_auth": "client_secret_basic",
+      "client_secret_env": "BACKEND_CLIENT_SECRET",
+      "scope": ["items:read"]
+    },
+    "write": {
+      "grant_type": "client_credentials",
+      "token_url": "https://issuer.example/oauth2/token",
+      "client_id": "backend-client",
+      "client_auth": "client_secret_basic",
+      "client_secret_env": "BACKEND_CLIENT_SECRET",
+      "scope": ["items:write"]
+    }
+  }
+}

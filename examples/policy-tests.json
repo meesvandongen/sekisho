@@ -1,0 +1,43 @@
+[
+  {
+    "name": "read_with_scopes",
+    "method": "GET",
+    "path": "/items",
+    "claims": {"sub": "alice", "scope": "items:read"},
+    "expected": {"allowed": true, "backend_auth": "read"}
+  },
+  {
+    "name": "publish_within_limit",
+    "method": "POST",
+    "path": "/items?tenant=blue",
+    "content_type": "application/json",
+    "body": "{\"amount\":3}",
+    "claims": {"sub": "alice", "scope": "items:write"},
+    "expected": {"allowed": true, "backend_auth": "write"}
+  },
+  {
+    "name": "publish_above_limit",
+    "method": "POST",
+    "path": "/items?tenant=blue",
+    "content_type": "application/json",
+    "body": "{\"amount\":6}",
+    "claims": {"sub": "alice", "scope": "items:write"},
+    "expected": {"allowed": false, "status": 403, "code": "package_denied"}
+  },
+  {
+    "name": "publish_without_scope",
+    "method": "POST",
+    "path": "/items?tenant=blue",
+    "content_type": "application/json",
+    "body": "{\"amount\":3}",
+    "claims": {"sub": "alice", "scope": "items:read"},
+    "expected": {"allowed": false, "status": 403, "code": "insufficient_scope"}
+  },
+  {
+    "name": "get_by_path_selector",
+    "method": "GET",
+    "path": "/items/abc",
+    "claims": {"sub": "alice", "scope": "items:read"},
+    "expected": {"allowed": true, "backend_auth": "read"}
+  }
+]
