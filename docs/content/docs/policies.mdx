@@ -1,0 +1,140 @@
+---
+title: Policies
+description: Bind every OpenAPI operation to exactly one composable CEL check.
+icon: ScrollText
+---
+
+`policy.routes` is an array of route bindings. There must be **exactly one binding per OpenAPI method and path** — listing an operation in OpenAPI implies no policy, and there is no permissive fallback. Missing, duplicate or unknown bindings fail startup.
+
+## Route bindings
+
+```json title="config.json"
+{
+  "policy": {
+    "definitions": {
+      "publisher": { "cel": "claims.sub == params.subject" },
+      "amount": { "file": "policies/amount.cel" }
+    },
+    "routes": [
+      {
+        "name": "publish_item",
+        "match": { "operation_id": "createItem" },
+        "check": {
+          "all": [
+            { "ref": "publisher", "params": { "subject": "alice" } },
+            { "ref": "amount", "params": { "max": 5 } }
+          ]
+        },
+        "auth": { "backend": "write", "required_scopes": ["items:write"] },
+        "on_deny": {
+          "response": { "status": 403, "code": "package_denied", "detail": "Publishing policy denied this item." },
+          "log": { "reason": "publishing_policy", "level": "warn", "message": "publishing policy denied" }
+        }
+      }
+    ]
+  }
+}
+```
+
+The excerpt shows a single binding; a real configuration must cover **every** operation.
+
+### `match`
+
+Select the operation with either form:
+
+<Tabs items={['By operation ID', 'By path and method']}>
+<Tab value="By operation ID">
+
+```json
+{ "operation_id": "createItem" }
+```
+
+</Tab>
+<Tab value="By path and method">
+
+```json
+{ "path": "/items/{id}", "method": "GET" }
+```
+
+Use the OpenAPI **template**, not a concrete URL. This works for operations without an `operationId`.
+
+</Tab>
+</Tabs>
+
+### `check`
+
+The rule that must evaluate to `true` for the request to be forwarded. See [rules](#rules) below.
+
+### `auth`
+
+Every binding needs an explicit `auth.backend`:
+
+| Value | Meaning |
+| --- | --- |
+| `"none"` | Forward **no** `Authorization` header upstream. |
+| `"default"` | Use the top-level `backend_auth` credential. |
+| _profile name_ | Use the named profile from `backend_auth_profiles`. |
+
+`auth.required_scopes` is an optional **all-of** list checked before the policy. See [backend authentication](/backend-auth).
+
+### `params`
+
+Binding-level parameters, available to expressions as `params`. A `ref` that carries its own `params` overrides them within that reference.
+
+### `on_deny`
+
+Customize what happens when the check evaluates to `false`:
+
+- `response.status` — `401`, `403` (default) or `404`.
+- `response.code` and `response.detail` — bounded static text returned in the problem document.
+- `log.reason`, `log.message` and `log.level` (`info`, `warn`, `error`) — customize the [audit event](/audit).
+
+<Callout type="warn" title="Static text only">
+  Never interpolate caller input into denial text or logs.
+</Callout>
+
+`on_deny` applies whenever the composed check returns `false`, including when any child of an `all` fails. **Errors** during evaluation or data lookup are not converted into custom denials: they fail closed with their own stable code, such as `policy_error` or `userinfo_unavailable`.
+
+## Rules
+
+`policy.definitions` holds named, reusable rules. Every rule — named or inline — specifies **exactly one** of:
+
+| Key | Description |
+| --- | --- |
+| `cel` | An inline CEL expression. |
+| `file` | A CEL file relative to the config (UTF-8, at most 64 KiB). |
+| `ref` | A named rule from `definitions`, optionally with `params`. |
+| `all` | Every child must be true. Short-circuits in order. |
+| `any` | At least one child must be true. Short-circuits in order. |
+| `not` | Negates one child rule. |
+
+`all` and `any` require at least one child. Named rules may reference other named rules, but cycles and excessive expansion fail startup. A `ref` with `params` provides reuse without user-defined CEL functions or unbounded recursion.
+
+Rules are compiled and type-checked **once, at startup**.
+
+## Shared values
+
+`policy.values` is a map available to every expression as `config`:
+
+```json
+{
+  "policy": {
+    "values": { "tenant": "blue" }
+  }
+}
+```
+
+```cel title="policies/amount.cel"
+'tenant' in query && query['tenant'][0] == config.tenant &&
+body.amount <= params.max
+```
+
+## Limits
+
+- Each CEL evaluation has a cost cap of 10,000 units.
+- The expanded policy graph is limited to 256 nodes and 16 levels per route.
+- The whole configuration may compile at most 4,096 policy nodes.
+
+<Callout type="info" title="Legacy format">
+  The earlier `policy.default` / `policy.operations` format is deliberately rejected. Migrate every operation to an explicit route binding.
+</Callout>

@@ -1,0 +1,85 @@
+---
+title: Quickstart
+description: Build Sekisho with compile-time OpenTelemetry and run it against the example configuration.
+icon: Rocket
+---
+
+Sekisho lives in the [`gateway/`](https://github.com/meesvandongen/sekisho/tree/main/gateway) directory of the repository and requires **Go 1.26 or newer**.
+
+<Steps>
+<Step>
+
+### Copy the examples
+
+Start from [`examples/config.json`](https://github.com/meesvandongen/sekisho/blob/main/gateway/examples/config.json) and [`examples/api.yaml`](https://github.com/meesvandongen/sekisho/blob/main/gateway/examples/api.yaml), then point them at your issuer and API.
+
+<Files>
+  <Folder name="gateway/examples" defaultOpen>
+    <File name="config.json" />
+    <File name="api.yaml" />
+    <File name="policy-tests.json" />
+    <Folder name="policies" defaultOpen>
+      <File name="amount.cel" />
+    </Folder>
+  </Folder>
+</Files>
+
+Paths inside the JSON config — the OpenAPI file, CEL files and private key files — are resolved **relative to the config file**.
+
+</Step>
+<Step>
+
+### Provide secrets
+
+Secrets are never read from the JSON file. Supply them through the environment variables the config names, for example from your secret manager:
+
+```sh
+export BACKEND_CLIENT_SECRET="…"
+```
+
+</Step>
+<Step>
+
+### Build with `otelc`
+
+The [Go compile-time instrumentation tool](https://opentelemetry.io/docs/zero-code/go/compile-time/) is pinned in `go.mod`. Building through it injects the OpenTelemetry SDK and the supported instrumentations:
+
+```sh
+cd gateway
+go tool otelc go build -buildvcs=false -o sekisho .
+```
+
+</Step>
+<Step>
+
+### Run
+
+```sh
+OTEL_SERVICE_NAME=sekisho \
+OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
+OTEL_LOGS_EXPORTER=none \
+./sekisho -config examples/config.json
+```
+
+</Step>
+</Steps>
+
+<Callout type="info" title="Plain builds work too">
+  `go run .` or `go build .` produce a working gateway, but it emits no OpenTelemetry signals. Audit logs and outcome headers work either way.
+</Callout>
+
+## Startup is strict
+
+Configuration is validated once, at startup, and changes require a restart. Sekisho refuses to start on any of:
+
+- unknown or duplicate fields in the JSON config;
+- invalid OpenAPI documents, or operations without a policy binding;
+- policies that fail to compile or type-check;
+- missing credentials for a backend profile that a route selects.
+
+## Command-line flags
+
+| Flag | Description |
+| --- | --- |
+| `-config <file>` | Path to the JSON configuration file. Required. |
+| `-test-policies <file>` | Run [offline policy fixtures](/testing-policies) (relative to the config file) instead of serving. |

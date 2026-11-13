@@ -1,0 +1,34 @@
+---
+title: Audit trail
+description: One structured JSON event per request, on by default.
+icon: NotebookPen
+---
+
+Structured audit events are **on by default**, written as one JSON line per request to stderr. To opt out:
+
+```json
+{ "audit": { "enabled": false } }
+```
+
+## What an event contains
+
+- the outcome code, HTTP status and decision phase;
+- the method, OpenAPI route template and operation ID;
+- the binding name and static deny reason, when present;
+- elapsed milliseconds and the trace ID, when present;
+- a `dependency_status` for rejected token or identity endpoints;
+- after successful verification, `subject_sha256` — the SHA-256 of `issuer + NUL + subject`.
+
+Operators can tell a rejected policy from a policy-evaluation error, or an identity endpoint failure from an unreachable upstream, without exposing server error text to callers.
+
+## What it never contains
+
+Raw JWTs, request bodies, headers, query strings and path parameter values are excluded. Invalid tokens never contribute an identity hash.
+
+<Callout type="warn" title="Pseudonymous, not anonymous">
+  `subject_sha256` is a correlation aid. Protect and retain audit logs accordingly.
+</Callout>
+
+## Delivery
+
+Audit writes are best effort: sink errors are logged, not retroactively turned into request failures. Ship stderr with a durable log collector if you need guaranteed retention, and provision it for your expected request volume.

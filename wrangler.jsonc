@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sekisho",
+  "compatibility_date": "2026-11-01",
+  // Docs site: a static-assets-only Worker. `pnpm build` exports docs/ to docs/out.
+  "assets": {
+    "directory": "./docs/out",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  },
+  "routes": [
+    {
+      "pattern": "sekisho.mvd.im",
+      "custom_domain": true
+    }
+  ],
+  "workers_dev": false,
+  // Worker Previews for non-production branches (Workers Builds).
+  "previews": {},
+  "observability": {
+    "enabled": true
+  }
+}

@@ -1,0 +1,47 @@
+---
+title: Limits & deployment
+description: Default limits, timeouts and production deployment guidance.
+icon: Gauge
+---
+
+## Request limits
+
+| Setting | Default | Configurable |
+| --- | --- | --- |
+| Inbound and response headers | 32 KiB | `max_header_bytes` |
+| Request body | 1 MiB | `max_body_bytes` |
+| Active requests | 64 | `max_concurrent_requests` |
+| CEL cost per leaf | 10,000 units | — |
+| Expanded policy nodes per route | 256 | — |
+| JSON nesting | 64 levels | — |
+| JSON values | 20,000 | — |
+
+Bodies with a known oversized length are rejected before forwarding; streamed bodies are capped as they are read. Response bodies are streamed.
+
+## Document and response limits
+
+| Input | Limit |
+| --- | --- |
+| Config file | 1 MiB |
+| OpenAPI document | 8 MiB |
+| Issuer / JWKS responses | 1 MiB |
+| Token responses | 64 KiB |
+| Identity responses | 16 KiB |
+
+## Timeouts
+
+| Timeout | Value |
+| --- | --- |
+| Header read | 5 s |
+| Request read / write | 60 s |
+| Upstream response headers | 30 s |
+| Identity and token HTTP calls | 10 s |
+
+The injected SDK's batch queue is bounded and configurable through standard OpenTelemetry environment variables.
+
+## Deploying to production
+
+- Use HTTPS for the issuer, token endpoint, upstream and collector.
+- The listener serves plain HTTP. Terminate public TLS at a trusted ingress, or add TLS termination in front of Sekisho.
+- Don't trust caller-supplied `Host` or forwarding headers in policies. Sekisho removes inbound forwarding headers before setting its own.
+- Provision the audit sink and collector for your expected request volume.

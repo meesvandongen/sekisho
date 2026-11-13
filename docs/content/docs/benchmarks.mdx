@@ -1,0 +1,32 @@
+---
+title: Benchmarks
+description: Measure the gateway's steady-state overhead locally.
+icon: Timer
+---
+
+```sh
+cd gateway
+go test ./... -run '^$' -bench '^BenchmarkProxy' -benchmem -benchtime=1s -count=3
+OTELC_INTEGRATION_TEST=1 go test ./... -run '^TestCompileTimeOTLP$' -count=1
+go test -race ./...
+```
+
+The benchmarks prime the JWKS cache, use local upstream and token servers, and cover:
+
+- route rejection, and invalid and valid bearer tokens;
+- claims and JSON-body policies;
+- 64 KiB streamed versus parsed bodies;
+- cached client credentials and token exchange;
+- JSON audit encoding (`audit_json` writes to `io.Discard` to measure encoding, not disk throughput).
+
+`BenchmarkPolicyShortCircuit` times a composite policy that denies before touching a 64 KiB body. `BenchmarkProxyHTTP` covers the HTTP server path, whereas the other `BenchmarkProxy` cases call the handler directly; `BenchmarkProxyParallel` measures concurrent throughput.
+
+## Reading the results
+
+- Plain `go test` measures without injected hooks. To measure the instrumented build, run an external load generator against the `go tool otelc go build` binary with a representative collector.
+- `otelc` v1.2.0 currently fails to instrument Go's generated test main with `otelc go test`; the opt-in integration test above uses a plain test runner with an instrumented subprocess instead.
+- Compare `ns/op`, `B/op` and `allocs/op` only on the **same** machine and settings, and never against race-enabled runs.
+
+<Callout type="info">
+  These are steady-state local measurements, not a substitute for load testing the real issuer, collector, TLS, ingress and upstream under production latency and rate limits.
+</Callout>

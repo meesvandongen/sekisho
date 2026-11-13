@@ -1,4 +1,4 @@
-module github.com/meesvandongen/sekisho
+module github.com/meesvandongen/sekisho/gateway
 
 go 1.26.0
 
