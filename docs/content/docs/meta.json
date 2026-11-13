@@ -3,6 +3,7 @@
   "pages": [
     "---門 · Start---",
     "index",
+    "installation",
     "quickstart",
     "---検 · Gate---",
     "routing",

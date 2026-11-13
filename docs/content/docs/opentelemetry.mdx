@@ -4,7 +4,7 @@ description: Compile-time instrumentation, spans, metrics and privacy considerat
 icon: Activity
 ---
 
-Sekisho is instrumented at build time by the pinned [Go compile-time instrumentation tool](https://opentelemetry.io/docs/zero-code/go/compile-time/) (`otelc`). The SDK initializes **before** the gateway reads its config, so OpenTelemetry is configured with environment variables set before launch — not in the JSON file.
+Sekisho is instrumented at build time by the pinned [Go compile-time instrumentation tool](https://opentelemetry.io/docs/zero-code/go/compile-time/) (`otelc`). Release binaries and the container image are built this way, so there is nothing to enable at install time. The SDK initializes **before** the gateway reads its config, so OpenTelemetry is configured with environment variables set before launch — not in the JSON file.
 
 ```sh
 OTEL_SERVICE_NAME=sekisho
@@ -20,8 +20,9 @@ Standard per-signal endpoints, exporter headers, sampling, resources, batch and 
 - `OTEL_SDK_DISABLED=true` disables the injected SDK and hooks.
 - `OTEL_GO_ENABLED_INSTRUMENTATIONS` / `OTEL_GO_DISABLED_INSTRUMENTATIONS` select compiled-in hooks at runtime. `nethttp` controls both the HTTP client and server hooks.
 - Disabling only the trace exporter does not disable metrics.
+- `OTEL_LOG_LEVEL` (`debug`, `info`, `warn`, `error`) sets the level of the runtime's own log lines, which go to stdout. The default is `info`.
 
-With the SDK disabled, or with a plain `go build`, audit logs and outcome responses still work, but no spans or metrics are exported.
+With the SDK disabled, or with a plain `go build` [from source](/installation#building-from-source), audit logs and outcome responses still work, but no spans or metrics are exported.
 
 ## Traces
 

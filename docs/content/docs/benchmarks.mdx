@@ -4,6 +4,8 @@ description: Measure the gateway's steady-state overhead locally.
 icon: Timer
 ---
 
+Benchmarks run from a source checkout and require **Go 1.26 or newer**; they are meant for working on Sekisho itself.
+
 ```sh
 cd gateway
 go test ./... -run '^$' -bench '^BenchmarkProxy' -benchmem -benchtime=1s -count=3

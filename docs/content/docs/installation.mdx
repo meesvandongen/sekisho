@@ -1,0 +1,129 @@
+---
+title: Installation
+description: Download a release binary or run the container image — no Go toolchain required.
+icon: Download
+---
+
+Every [release](https://github.com/meesvandongen/sekisho/releases) publishes prebuilt binaries and a multi-arch container image. Both are built with [compile-time OpenTelemetry](/opentelemetry), so traces and metrics work out of the box.
+
+## Release binaries
+
+Binaries are static, single-file executables for Linux, macOS and Windows on `amd64` and `arm64`. Each archive contains the `sekisho` executable and the [example configuration](https://github.com/meesvandongen/sekisho/tree/main/gateway/examples).
+
+<Tabs items={['Linux', 'macOS', 'Windows']}>
+<Tab value="Linux">
+
+```sh
+curl -fsSL https://github.com/meesvandongen/sekisho/releases/latest/download/sekisho_linux_amd64.tar.gz | tar -xz
+sudo install sekisho_linux_amd64/sekisho /usr/local/bin/sekisho
+sekisho -version
+```
+
+Use `sekisho_linux_arm64.tar.gz` on ARM machines.
+
+</Tab>
+<Tab value="macOS">
+
+```sh
+curl -fsSL https://github.com/meesvandongen/sekisho/releases/latest/download/sekisho_darwin_arm64.tar.gz | tar -xz
+sudo install sekisho_darwin_arm64/sekisho /usr/local/bin/sekisho
+sekisho -version
+```
+
+Use `sekisho_darwin_amd64.tar.gz` on Intel Macs. The binary is not notarized: if you downloaded it with a browser instead of `curl`, clear the quarantine flag with `xattr -d com.apple.quarantine /usr/local/bin/sekisho`.
+
+</Tab>
+<Tab value="Windows">
+
+```powershell
+Invoke-WebRequest https://github.com/meesvandongen/sekisho/releases/latest/download/sekisho_windows_amd64.zip -OutFile sekisho.zip
+Expand-Archive sekisho.zip -DestinationPath .
+.\sekisho_windows_amd64\sekisho.exe -version
+```
+
+Use `sekisho_windows_arm64.zip` on ARM machines.
+
+</Tab>
+</Tabs>
+
+To pin a version, replace `latest/download` with `download/<tag>`, for example `releases/download/v1.2.0/sekisho_linux_amd64.tar.gz`.
+
+### Verifying downloads
+
+Each release includes a `checksums.txt` with the SHA-256 of every archive:
+
+```sh
+curl -fsSLO https://github.com/meesvandongen/sekisho/releases/latest/download/checksums.txt
+sha256sum --ignore-missing -c checksums.txt
+```
+
+On macOS, use `shasum -a 256 --ignore-missing -c checksums.txt`.
+
+## Container image
+
+```text
+ghcr.io/meesvandongen/sekisho
+```
+
+The image supports `linux/amd64` and `linux/arm64`. It is based on [distroless](https://github.com/GoogleContainerTools/distroless) `static:nonroot`, so it has no shell and runs as UID `65532`.
+
+| Tag | Follows |
+| --- | --- |
+| `latest` | The newest stable release. |
+| `1.2.0` | Exactly that release. |
+| `1.2` | The newest patch of `1.2`. |
+| `1` | The newest release of major version `1` (from `1.0.0` on). |
+
+The image starts `sekisho -config /etc/sekisho/config.json` and listens on port `8080`. The example configuration is bundled at `/etc/sekisho`, so you can try it without any files of your own:
+
+```sh
+docker run --rm ghcr.io/meesvandongen/sekisho -config /etc/sekisho/config.json -explain
+```
+
+To run your own configuration, mount its directory over `/etc/sekisho` and pass secrets and OpenTelemetry settings as environment variables:
+
+```sh
+docker run --rm -p 8080:8080 \
+  -v "$PWD/sekisho:/etc/sekisho:ro" \
+  -e BACKEND_CLIENT_SECRET \
+  -e OTEL_SERVICE_NAME=sekisho \
+  -e OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4318 \
+  ghcr.io/meesvandongen/sekisho:1
+```
+
+The same settings in Docker Compose:
+
+```yaml title="compose.yaml"
+services:
+  sekisho:
+    image: ghcr.io/meesvandongen/sekisho:1
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./sekisho:/etc/sekisho:ro
+    environment:
+      BACKEND_CLIENT_SECRET: ${BACKEND_CLIENT_SECRET}
+      OTEL_SERVICE_NAME: sekisho
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://collector:4318
+```
+
+<Callout type="warn" title="Inside a container">
+  Keep `listen` on all interfaces (the default `:8080`) — an address like `127.0.0.1:8080` is unreachable from outside the container. Mounted files must be readable by UID `65532`.
+</Callout>
+
+## Building from source
+
+You only need this to work on Sekisho itself. To build the container image from a checkout, Docker is enough — the Go toolchain runs inside the build:
+
+```sh
+docker build -t sekisho .
+```
+
+Building a binary directly requires **Go 1.26 or newer**. Build through the [pinned `otelc` tool](/opentelemetry) to include OpenTelemetry:
+
+```sh
+cd gateway
+go tool otelc go build -buildvcs=false -o sekisho .
+```
+
+A plain `go build` also produces a working gateway, but it emits no OpenTelemetry signals.

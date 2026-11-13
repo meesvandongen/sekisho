@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -11,6 +12,9 @@ import (
 	"syscall"
 	"time"
 )
+
+// version is set at release build time with -ldflags "-X main.version=…".
+var version = "dev"
 
 func newHTTPServer(cfg Config, handler http.Handler) *http.Server {
 	return &http.Server{
@@ -28,9 +32,14 @@ func main() {
 	configPath := flag.String("config", "", "path to the JSON configuration file")
 	policyTests := flag.String("test-policies", "", "run offline policy fixtures relative to the config file")
 	explain := flag.Bool("explain", false, "print the effective policy of every OpenAPI operation and exit")
+	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
+	if *showVersion {
+		fmt.Println("sekisho", version)
+		return
+	}
 	if *configPath == "" || flag.NArg() != 0 || (*explain && *policyTests != "") {
-		log.Fatal("usage: sekisho -config config.json [-explain | -test-policies fixtures.json]")
+		log.Fatal("usage: sekisho -config config.json [-explain | -test-policies fixtures.json] | sekisho -version")
 	}
 	cfg, err := loadConfig(*configPath)
 	if err != nil {

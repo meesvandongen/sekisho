@@ -6,11 +6,15 @@ on:
     paths:
       - 'gateway/**'
       - 'go.work'
+      - 'Dockerfile'
+      - '.dockerignore'
       - '.github/workflows/gateway.yml'
   pull_request:
     paths:
       - 'gateway/**'
       - 'go.work'
+      - 'Dockerfile'
+      - '.dockerignore'
       - '.github/workflows/gateway.yml'
 
 permissions:
@@ -31,3 +35,23 @@ jobs:
       - run: go vet ./...
       - run: go test -race ./...
       - run: go run -buildvcs=false . -config examples/config.json -test-policies policy-tests.json
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - name: Build arm64 image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64
+      - name: Build amd64 image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: sekisho:ci
+      - name: Run policy fixtures in the image
+        run: docker run --rm -e OTEL_SDK_DISABLED=true sekisho:ci -config config.json -test-policies policy-tests.json
