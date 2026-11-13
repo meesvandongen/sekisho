@@ -1,0 +1,7 @@
+{
+  "baseBranch": "main",
+  "changelog": ["@changesets/changelog-github", { "repo": "meesvandongen/sekisho" }],
+  "commit": false,
+  "ignore": ["@sekisho/docs"],
+  "privatePackages": { "version": true, "tag": false }
+}

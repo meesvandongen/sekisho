@@ -7,9 +7,12 @@
     "build": "pnpm --filter @sekisho/docs build",
     "typecheck": "pnpm --filter @sekisho/docs typecheck",
     "preview": "wrangler dev",
-    "deploy": "pnpm build && wrangler deploy"
+    "deploy": "pnpm build && wrangler deploy",
+    "changeset": "changeset"
   },
   "devDependencies": {
+    "@changesets/changelog-github": "^1.0.1",
+    "@changesets/cli": "^3.0.3",
     "wrangler": "^4.161.0"
   }
 }

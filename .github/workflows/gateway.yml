@@ -55,3 +55,20 @@ jobs:
           tags: sekisho:ci
       - name: Run policy fixtures in the image
         run: docker run --rm -e OTEL_SDK_DISABLED=true sekisho:ci -config config.json -test-policies policy-tests.json
+
+  changeset:
+    # Every gateway change needs a changeset; use `pnpm changeset --empty` for
+    # changes that should not be released. The Release pull request is exempt.
+    if: github.event_name == 'pull_request' && github.head_ref != 'changeset-release/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec changeset status --since=origin/${{ github.base_ref }}
