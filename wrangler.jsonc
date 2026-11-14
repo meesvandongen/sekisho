@@ -8,15 +8,17 @@
     "html_handling": "auto-trailing-slash",
     "not_found_handling": "404-page"
   },
-  "routes": [
-    {
-      "pattern": "sekisho.mvd.im",
-      "custom_domain": true
-    }
-  ],
+  // Only keys that `wrangler deploy` enforces belong below. Custom domains and
+  // routes are managed in the dashboard: without `routes`, deploys leave them alone.
+  //
+  // Every deploy sets both workers.dev toggles; a missing key means "use the
+  // default", not "keep the dashboard value". Unset, preview URLs follow
+  // workers_dev, so each production deploy would switch them off again.
   "workers_dev": false,
+  "preview_urls": true,
   // Worker Previews for non-production branches (Workers Builds).
   "previews": {},
+  // A missing `observability` block disables observability on deploy.
   "observability": {
     "enabled": true
   }
