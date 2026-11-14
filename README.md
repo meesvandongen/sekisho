@@ -48,13 +48,16 @@ Working on Sekisho itself requires Go 1.26+ (and Node with pnpm for the docs).
 ```sh
 go test ./gateway/...   # gateway tests (go.work at the root)
 docker build -t sekisho .   # container image, built with otelc
-pnpm install && pnpm dev   # docs at http://localhost:3000
+pnpm install && pnpm dev   # docs at http://localhost:3000 (also installs Changesets)
 ```
 
 ### Releasing
 
-Push a `v*` tag to run [the release workflow](.github/workflows/release.yml). It attaches binaries for Linux, macOS and Windows (`amd64`, `arm64`) plus `checksums.txt` to a GitHub release, and pushes a multi-arch image to `ghcr.io/meesvandongen/sekisho`. Tags with a pre-release suffix (`v1.2.0-rc.1`) are published as pre-releases and do not move `latest`.
+Releases are versioned with [Changesets](https://github.com/changesets/changesets). Every pull request that changes the gateway adds a changeset describing the change and its semver bump (CI checks for one):
 
 ```sh
-git tag v0.1.0 && git push origin v0.1.0
+pnpm changeset          # pick patch, minor or major and describe the change
+pnpm changeset --empty  # for gateway changes that need no release
 ```
+
+On `main`, [the release workflow](.github/workflows/release.yml) collects pending changesets into a **Release** pull request that bumps [`gateway/package.json`](./gateway/package.json) and updates [`gateway/CHANGELOG.md`](./gateway/CHANGELOG.md). Merging it tags `v<version>`, attaches binaries for Linux, macOS and Windows (`amd64`, `arm64`) plus `checksums.txt` to a GitHub release with that version's changelog as notes, and pushes a multi-arch image to `ghcr.io/meesvandongen/sekisho`. Pre-release versions (`pnpm changeset pre enter rc`) are published as GitHub pre-releases and do not move `latest`.

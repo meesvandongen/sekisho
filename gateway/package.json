@@ -1,0 +1,6 @@
+{
+  "name": "sekisho",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Holds the gateway's release version for Changesets. The gateway itself is Go; see go.mod."
+}
