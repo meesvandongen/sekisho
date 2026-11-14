@@ -12,7 +12,9 @@ Sekisho reads a single JSON object, at most 1 MiB, passed with `-config`. Unknow
   type={{
     listen: { type: 'string', default: '":8080"', description: 'Listen address.' },
     openapi_file: { type: 'string', required: true, description: 'Path to the OpenAPI 3 document used as the route allowlist.' },
-    upstream_url: { type: 'string', required: true, description: 'Absolute HTTP(S) URL of the upstream, without a query. Its path is prefixed to forwarded requests.' },
+    mode: { type: '"proxy" | "auth_request"', default: '"proxy"', description: 'Forward allowed requests to upstream_url, or answer nginx auth_request subrequests. See [nginx auth_request](/auth-request).' },
+    upstream_url: { type: 'string', required: true, description: 'Absolute HTTP(S) URL of the upstream, without a query. Its path is prefixed to forwarded requests. Required in proxy mode; not allowed in auth_request mode.' },
+    auth_request: { type: 'object', description: 'auth_request mode only: the headers that describe the original request.' },
     max_header_bytes: { type: 'integer', default: '32768', description: 'Maximum inbound and response header size.' },
     max_body_bytes: { type: 'integer', default: '1048576', description: 'Maximum request body size.' },
     max_concurrent_requests: { type: 'integer', default: '64', description: 'Maximum number of in-flight requests.' },
@@ -22,6 +24,17 @@ Sekisho reads a single JSON object, at most 1 MiB, passed with `-config`. Unknow
     identity: { type: 'object', description: 'Optional userinfo and introspection endpoints.' },
     policy: { type: 'object', required: true, description: 'Rule definitions, shared values and route bindings.' },
     audit: { type: 'object', description: 'Structured audit logging.' },
+  }}
+/>
+
+## `auth_request`
+
+Only allowed with `"mode": "auth_request"`. See [nginx auth_request](/auth-request).
+
+<TypeTable
+  type={{
+    method_header: { type: 'string', default: '"X-Original-Method"', description: 'Header that carries the original request method.' },
+    uri_header: { type: 'string', default: '"X-Original-URI"', description: 'Header that carries the original request target (path and query).' },
   }}
 />
 

@@ -29,6 +29,7 @@ type proxyHandler struct {
 	sources     *identitySources
 	policies    *policySet
 	proxy       *httputil.ReverseProxy
+	authRequest bool
 	slots       chan struct{}
 	auditLogger *slog.Logger
 	metrics     requestMetrics
@@ -40,14 +41,11 @@ func newProxy(ctx context.Context, cfg Config) (*proxyHandler, error) {
 	if err := cfg.normalize(); err != nil {
 		return nil, err
 	}
-	target, err := parseEndpoint("upstream_url", cfg.UpstreamURL, false)
-	if err != nil {
-		return nil, err
-	}
 	router, policies, err := newPolicyRouter(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
+	authRequest := cfg.Mode == "auth_request"
 	authClient := newAuthHTTPClient(cfg.MaxHeaderBytes, cfg.MaxConcurrentRequests)
 	verifier, err := newVerifier(ctx, cfg.OIDC, authClient)
 	if err != nil {
@@ -79,12 +77,31 @@ func newProxy(ctx context.Context, cfg Config) (*proxyHandler, error) {
 		}
 		route.backend = backends[route.backendName]
 	}
+	metrics, err := newRequestMetrics()
+	if err != nil {
+		return nil, fmt.Errorf("create request metrics: %w", err)
+	}
+	handler := &proxyHandler{
+		cfg: cfg, router: router, verifier: verifier, authClient: authClient,
+		sources: sources, policies: policies, authRequest: authRequest,
+		slots: make(chan struct{}, cfg.MaxConcurrentRequests), metrics: metrics,
+	}
+	if cfg.Audit.isEnabled() {
+		handler.auditLogger = slog.New(slog.NewJSONHandler(os.Stderr, nil))
+	}
+	if authRequest {
+		return handler, nil
+	}
+	target, err := parseEndpoint("upstream_url", cfg.UpstreamURL, false)
+	if err != nil {
+		return nil, err
+	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.MaxResponseHeaderBytes = int64(cfg.MaxHeaderBytes)
 	transport.ResponseHeaderTimeout = 30 * time.Second
 	transport.DisableCompression = true
 	transport.MaxIdleConnsPerHost = cfg.MaxConcurrentRequests
-	reverseProxy := &httputil.ReverseProxy{
+	handler.proxy = &httputil.ReverseProxy{
 		Transport: transport,
 		Rewrite: func(req *httputil.ProxyRequest) {
 			req.SetURL(target)
@@ -127,18 +144,6 @@ func newProxy(ctx context.Context, cfg Config) (*proxyHandler, error) {
 			writeProblem(w, r, status, code)
 		},
 	}
-	metrics, err := newRequestMetrics()
-	if err != nil {
-		return nil, fmt.Errorf("create request metrics: %w", err)
-	}
-	handler := &proxyHandler{
-		cfg: cfg, router: router, verifier: verifier, authClient: authClient,
-		sources: sources, policies: policies, proxy: reverseProxy,
-		slots: make(chan struct{}, cfg.MaxConcurrentRequests), metrics: metrics,
-	}
-	if cfg.Audit.isEnabled() {
-		handler.auditLogger = slog.New(slog.NewJSONHandler(os.Stderr, nil))
-	}
 	return handler, nil
 }
 
@@ -174,6 +179,13 @@ func newPolicyRouter(ctx context.Context, cfg Config) (routers.Router, *policySe
 	if err != nil {
 		return nil, nil, err
 	}
+	if cfg.Mode == "auth_request" {
+		for _, variable := range []string{"body", "body_bytes", "body_text"} {
+			if policies.needs(variable) {
+				return nil, nil, fmt.Errorf(`policies cannot use %s in mode "auth_request": the fronting proxy does not send the request body`, variable)
+			}
+		}
+	}
 
 	// Match public paths, not the backend host or base paths in OpenAPI servers.
 	spec.Servers = openapi3.Servers{{URL: "/"}}
@@ -191,7 +203,10 @@ type outcomeContextKey struct{}
 
 func (h *proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
-	result := &requestOutcome{code: outcomeInternalError, phase: "admission"}
+	result := &requestOutcome{code: outcomeInternalError, phase: "admission", method: r.Method}
+	if h.authRequest {
+		w = &authRequestWriter{ResponseWriter: w}
+	}
 	writer := &outcomeWriter{ResponseWriter: w}
 	if id := traceID(r.Context()); id != "" {
 		writer.Header().Set("X-Proxy-Trace-ID", id)
@@ -220,6 +235,16 @@ func (h *proxyHandler) serve(w http.ResponseWriter, r *http.Request, result *req
 		w.Header().Set("Retry-After", "1")
 		reject(w, r, result, http.StatusTooManyRequests, outcomeRateLimited)
 		return
+	}
+	if h.authRequest {
+		original, failure := originalRequest(r, h.cfg.AuthRequest)
+		if failure != nil {
+			result.phase = "auth_request"
+			reject(w, r, result, failure.status, outcomeAuthRequestInvalid)
+			return
+		}
+		r = original
+		result.method = r.Method
 	}
 	if r.ContentLength > h.cfg.MaxBodyBytes {
 		result.phase = "request_body"
@@ -301,9 +326,10 @@ func (h *proxyHandler) serve(w http.ResponseWriter, r *http.Request, result *req
 	result.phase = "backend_auth"
 	r = r.WithContext(baggage.ContextWithBaggage(r.Context(), baggage.Baggage{}))
 	r.Header.Del("Baggage")
+	authorization := ""
 	switch {
 	case compiled.backendName == "forward":
-		r.Header.Set("Authorization", "Bearer "+rawToken)
+		authorization = "Bearer " + rawToken
 	case compiled.backend != nil:
 		backendToken, err := compiled.backend.token(r.Context(), rawToken, token.Expiry)
 		if err != nil {
@@ -316,9 +342,21 @@ func (h *proxyHandler) serve(w http.ResponseWriter, r *http.Request, result *req
 			reject(w, r, result, http.StatusBadGateway, code)
 			return
 		}
-		r.Header.Set("Authorization", "Bearer "+backendToken)
-	default:
+		authorization = "Bearer " + backendToken
+	}
+	if h.authRequest {
+		// An empty X-Sekisho-Authorization makes nginx drop the caller's
+		// Authorization header, matching the "none" backend in proxy mode.
+		w.Header().Set(authRequestAuthorizationHeader, authorization)
+		w.Header().Set("X-Proxy-Outcome", string(outcomeAllowed))
+		result.code = outcomeAllowed
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if authorization == "" {
 		r.Header.Del("Authorization")
+	} else {
+		r.Header.Set("Authorization", authorization)
 	}
 	if !inputs.bodyLoaded {
 		if r.Body != nil && r.Body != http.NoBody {
