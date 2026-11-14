@@ -1,0 +1,104 @@
+---
+title: nginx auth_request
+description: Run Sekisho beside nginx as the decision service for auth_request, instead of as the proxy.
+icon: Waypoints
+---
+
+By default Sekisho is the reverse proxy: it checks a request and forwards it to `upstream_url`. With `"mode": "auth_request"` it only makes the decision. nginx's [`auth_request`](https://nginx.org/en/docs/http/ngx_http_auth_request_module.html) module sends Sekisho a subrequest describing each request, and nginx forwards the request itself if Sekisho allows it.
+
+Routing, OIDC verification, scopes, policies, identity lookups, backend credentials, audit records and metrics work the same as in proxy mode.
+
+## Configuration
+
+```json title="config.json"
+{
+  "mode": "auth_request",
+  "openapi_file": "api.yaml",
+  "oidc": { "issuer": "https://issuer.example", "audience": "proxy-audience" },
+  "policy": { "routes": [ … ] }
+}
+```
+
+- `upstream_url` is not allowed: nginx forwards allowed requests.
+- Policies cannot read `body`, `body_bytes` or `body_text`, because nginx doesn't send the request body to the auth subrequest. Sekisho rejects such a configuration at startup, and so do `-explain` and `-test-policies`.
+- Sekisho reads the original method and URI from `X-Original-Method` and `X-Original-URI`. To use other header names, set `auth_request.method_header` and `auth_request.uri_header`.
+
+## nginx
+
+```nginx title="nginx.conf"
+upstream api     { server api.internal:8000; }
+upstream sekisho { server 127.0.0.1:8080; }
+
+server {
+  listen 443 ssl;
+
+  location / {
+    auth_request /_sekisho;
+
+    # The credential Sekisho picked for this route (auth.backend). It is empty
+    # for "none", and nginx drops a header whose value is empty, so the
+    # caller's own token is not passed on.
+    auth_request_set $sekisho_authorization $upstream_http_x_sekisho_authorization;
+    proxy_set_header Authorization $sekisho_authorization;
+
+    # Optional: expose the outcome code, as proxy mode does.
+    auth_request_set $sekisho_outcome $upstream_http_x_proxy_outcome;
+    add_header X-Proxy-Outcome $sekisho_outcome always;
+
+    # No URI part: the upstream receives the same URI Sekisho checked.
+    proxy_pass http://api;
+  }
+
+  location = /_sekisho {
+    internal;
+    proxy_pass http://sekisho;
+    proxy_pass_request_body off;
+    proxy_set_header Content-Length "";
+    proxy_set_header X-Original-Method $request_method;
+    proxy_set_header X-Original-URI $request_uri;
+    proxy_set_header Host $host;   # for policies that read `host`
+  }
+}
+```
+
+Use `$request_uri`, not `$uri`. `$request_uri` is the raw request target with its query string. Sekisho checks it for [ambiguous paths](/routing#ambiguous-paths-are-rejected) and matches routes against it. Use `proxy_pass` without a URI part so that nginx passes the same raw target upstream. If nginx rewrites the path, the upstream may see a different path than the one Sekisho allowed.
+
+<Callout type="warn" title="Trust boundary">
+  In this mode Sekisho trusts `X-Original-Method` and `X-Original-URI`. Only nginx should be able to reach Sekisho, and only through nginx should anyone be able to reach the upstream. Otherwise a client can ask about one route and call another.
+</Callout>
+
+## Decisions
+
+`auth_request` understands three answers: 2xx allows, 401 and 403 deny, and anything else makes nginx return 500. Sekisho maps its decisions onto them:
+
+| Decision | Status to nginx | Client sees |
+| --- | --- | --- |
+| Allowed | `200` | The upstream response |
+| `401` (missing, expired or invalid token) | `401` with `WWW-Authenticate: Bearer` | `401` |
+| Any other 4xx, such as `policy_denied`, `insufficient_scope`, `route_not_found` or `rate_limited`, or an `on_deny` status | `403` | `403` |
+| 5xx (identity or backend-token failures) | `500` | `500` |
+
+The decision's own status is in `X-Sekisho-Status`, and its [outcome code](/outcomes) is in `X-Proxy-Outcome`. The [audit record](/audit) and metrics also keep the original status, method and route. nginx shows its own error page, not Sekisho's problem document, and drops `Retry-After`. An `on_deny` detail is therefore only visible in the subrequest response. Every decision is sent with `Cache-Control: no-store`.
+
+Allowed responses always carry `X-Sekisho-Authorization`:
+
+| `auth.backend` | `X-Sekisho-Authorization` |
+| --- | --- |
+| `"none"` | empty |
+| `"forward"` | `Bearer <caller token>` |
+| `"default"` or a profile | `Bearer <backend token>` |
+
+This header holds a credential. Pass it upstream only through `auth_request_set`, and never return it to clients.
+
+## Other proxies
+
+Traefik's `forwardAuth` and Caddy's `forward_auth` send `X-Forwarded-Method` and `X-Forwarded-Uri`:
+
+```json
+{ "mode": "auth_request", "auth_request": { "method_header": "X-Forwarded-Method", "uri_header": "X-Forwarded-Uri" } }
+```
+
+Both return a denial's status and body to the client, so the problem document reaches the caller. The status is still mapped as in the table above. To send the backend credential upstream:
+
+- **Caddy:** use `copy_headers X-Sekisho-Authorization>Authorization`.
+- **Traefik:** `authResponseHeaders` can only copy the header under its own name, `X-Sekisho-Authorization`, and leaves the caller's `Authorization` in place. Remove the caller's header with a `headers` middleware so the caller's token doesn't reach the upstream.

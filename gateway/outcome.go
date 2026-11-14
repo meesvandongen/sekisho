@@ -21,6 +21,8 @@ type outcomeCode string
 
 const (
 	outcomeForwarded                outcomeCode = "forwarded"
+	outcomeAllowed                  outcomeCode = "allowed"
+	outcomeAuthRequestInvalid       outcomeCode = "auth_request_invalid"
 	outcomeUpstreamRejected         outcomeCode = "upstream_rejected"
 	outcomeUpstreamFailure          outcomeCode = "upstream_failure"
 	outcomeUpstreamUnavailable      outcomeCode = "upstream_unavailable"
@@ -62,6 +64,7 @@ const (
 type requestOutcome struct {
 	code             outcomeCode
 	phase            string
+	method           string
 	route            string
 	operation        string
 	policy           string
@@ -166,7 +169,7 @@ func (h *proxyHandler) finishRequest(r *http.Request, w *outcomeWriter, result *
 	if h.auditLogger != nil {
 		fields := []any{
 			"event", "proxy.request",
-			"method", metricMethod(r.Method),
+			"method", metricMethod(result.method),
 			"route", result.route,
 			"operation", result.operation,
 			"phase", result.phase,
@@ -211,7 +214,7 @@ func (h *proxyHandler) finishRequest(r *http.Request, w *outcomeWriter, result *
 		route = "unmatched"
 	}
 	attributes := []attribute.KeyValue{
-		attribute.String("http.request.method", metricMethod(r.Method)),
+		attribute.String("http.request.method", metricMethod(result.method)),
 		attribute.String("http.route", route),
 		attribute.String("proxy.outcome", string(result.code)),
 		attribute.Int("http.response.status_code", status),
@@ -226,7 +229,7 @@ func (h *proxyHandler) finishRequest(r *http.Request, w *outcomeWriter, result *
 		span.SetAttributes(attributes...)
 		span.SetAttributes(attribute.String("proxy.phase", result.phase))
 		if result.route != "" {
-			span.SetName(metricMethod(r.Method) + " " + result.route)
+			span.SetName(metricMethod(result.method) + " " + result.route)
 		}
 		if result.operation != "" {
 			span.SetAttributes(attribute.String("proxy.operation", result.operation))

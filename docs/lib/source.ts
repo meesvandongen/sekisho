@@ -13,7 +13,7 @@ const docs = defineDocs({
     // Kanagawa: Shiki themes named after Hokusai's Great Wave.
     mdxOptions: applyMdxPreset({
       rehypeCodeOptions: {
-        langs: ['json', 'jsonc', 'yaml', 'sh', 'bash', 'powershell', 'go', celGrammar],
+        langs: ['json', 'jsonc', 'yaml', 'sh', 'bash', 'powershell', 'go', 'nginx', celGrammar],
         themes: {
           light: 'kanagawa-lotus',
           dark: 'kanagawa-dragon',

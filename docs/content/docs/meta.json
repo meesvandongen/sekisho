@@ -13,6 +13,8 @@
     "---札 · Credentials---",
     "backend-auth",
     "identity",
+    "---連 · Integrations---",
+    "auth-request",
     "---番 · Operations---",
     "testing-policies",
     "outcomes",

@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const (
@@ -21,6 +23,8 @@ const (
 
 type Config struct {
 	Listen                string                       `json:"listen"`
+	Mode                  string                       `json:"mode"`
+	AuthRequest           AuthRequestConfig            `json:"auth_request"`
 	OpenAPIFile           string                       `json:"openapi_file"`
 	UpstreamURL           string                       `json:"upstream_url"`
 	MaxHeaderBytes        int                          `json:"max_header_bytes"`
@@ -34,6 +38,14 @@ type Config struct {
 	Audit                 AuditConfig                  `json:"audit"`
 
 	configDir string
+}
+
+// AuthRequestConfig names the headers a fronting proxy (nginx auth_request,
+// Traefik forwardAuth, Caddy forward_auth) uses to describe the original
+// request in "auth_request" mode.
+type AuthRequestConfig struct {
+	MethodHeader string `json:"method_header"`
+	URIHeader    string `json:"uri_header"`
 }
 
 type AuditConfig struct {
@@ -211,8 +223,35 @@ func (c *Config) normalize() error {
 	if c.OpenAPIFile == "" {
 		return fmt.Errorf("openapi_file is required")
 	}
-	if _, err := parseEndpoint("upstream_url", c.UpstreamURL, false); err != nil {
-		return err
+	switch c.Mode {
+	case "", "proxy":
+		c.Mode = "proxy"
+		if c.AuthRequest != (AuthRequestConfig{}) {
+			return fmt.Errorf(`auth_request requires mode "auth_request"`)
+		}
+		if _, err := parseEndpoint("upstream_url", c.UpstreamURL, false); err != nil {
+			return err
+		}
+	case "auth_request":
+		if c.UpstreamURL != "" {
+			return fmt.Errorf(`upstream_url is not used in mode "auth_request"; the fronting proxy forwards allowed requests`)
+		}
+		if c.AuthRequest.MethodHeader == "" {
+			c.AuthRequest.MethodHeader = "X-Original-Method"
+		}
+		if c.AuthRequest.URIHeader == "" {
+			c.AuthRequest.URIHeader = "X-Original-URI"
+		}
+		for _, name := range []string{c.AuthRequest.MethodHeader, c.AuthRequest.URIHeader} {
+			if !validHeaderName(name) {
+				return fmt.Errorf("auth_request header name %q is invalid", name)
+			}
+		}
+		if http.CanonicalHeaderKey(c.AuthRequest.MethodHeader) == http.CanonicalHeaderKey(c.AuthRequest.URIHeader) {
+			return fmt.Errorf("auth_request method_header and uri_header must differ")
+		}
+	default:
+		return fmt.Errorf(`mode must be "proxy" or "auth_request"`)
 	}
 	if _, err := parseEndpoint("oidc.issuer", c.OIDC.Issuer, false); err != nil {
 		return err
@@ -326,6 +365,18 @@ func (c *CacheConfig) normalize() error {
 		c.MaxEntries = 128
 	}
 	return nil
+}
+
+func validHeaderName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, char := range name {
+		if char > 0x7e || char <= ' ' || strings.ContainsRune("\"(),/:;<=>?@[\\]{}", char) {
+			return false
+		}
+	}
+	return true
 }
 
 func parseEndpoint(name, raw string, allowQuery bool) (*url.URL, error) {
